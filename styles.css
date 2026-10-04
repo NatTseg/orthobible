@@ -984,3 +984,7 @@ dialog.chapter-drawer {
     padding-right: 2px;
   }
 }
+
+/* Preserve paragraph breaks in imported study notes. */
+.footnote p { white-space: pre-line; }
+#personalNotesFile { display: block; max-width: 100%; margin: 12px 0; }

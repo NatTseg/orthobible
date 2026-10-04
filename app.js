@@ -387,6 +387,11 @@ function selectTab(tab) {
   });
 }
 function openTab(tab) {
+  wisdomTopic = null;
+  wisdomListTop = 0;
+  selectedPrayer = null;
+  prayerListTop = 0;
+  savedFilter = "all";
   rememberScroll();
   closeDialog();
   returnPlace = null;
@@ -458,7 +463,7 @@ function notesHtml() {
     .filter(([k]) => k.startsWith(`${state.book}:${state.chapter}:`))
     .sort((a, b) => parseKey(a[0]).v - parseKey(b[0]).v);
   if (!entries.length) return "";
-  return `<section class="footnotes"><h2 class="section-label">Study notes</h2>${entries
+  return `<section class="footnotes"><h2 class="section-label">${personalNotesCount ? "Orthodox Study Bible · personal notes" : "Study notes"}</h2>${entries
     .map(
       ([key, n]) =>
         `<article class="footnote" id="note-${key}"><small>Verse ${parseKey(key).v} · ${esc(n.kind || "Note")}</small><h3>${esc(n.title || "")}</h3><p>${esc(n.body)}</p>${(
@@ -484,16 +489,19 @@ function renderChapter(scroll = 0) {
   pane.innerHTML = `<div class="content"><p class="eyebrow">${esc(displayName(state.book))}</p><div class="chapter-heading"><h1>${state.book === "PS2" ? "Psalm 151" : "Chapter " + state.chapter}</h1><span>Tap a verse number to save</span></div>${intro}<article class="verses">${rangeHtml(state.book, state.chapter)}</article><div class="chapter-end"><button class="secondary" data-direction="-1" ${!adjacent(-1) ? "disabled" : ""}>Previous</button><button class="secondary" data-direction="1" ${!adjacent(1) ? "disabled" : ""}>Next chapter</button></div>${notesHtml()}</div>`;
   pane.scrollTop = scroll * (pane.scrollHeight - pane.clientHeight);
 }
+let wisdomListTop = 0;
+function returnToTopics() {
+  wisdomTopic = null;
+  renderWisdom();
+  pane.scrollTop = wisdomListTop;
+}
 function renderWisdom() {
   if (!wisdomTopic) {
     pane.innerHTML = `<div class="content"><p class="eyebrow">Scripture for everyday life</p><h1>Wisdom</h1><p class="subtitle">Find a passage for what’s on your mind.</p>${window.WISDOM.categories.map((c) => `<h2 class="section-label">${esc(c.label)}</h2><div class="topic-grid">${c.topics.map((t) => `<button class="topic" data-topic="${t.id}">${esc(t.title)}${icon("right")}</button>`).join("")}</div>`).join("")}</div>`;
   } else {
     const t = wisdomTopic;
     pane.innerHTML = `<div class="content"><button class="text-button" id="allTopics">‹ All topics</button><h1>${esc(t.title)}</h1><p class="subtitle">${esc(t.line)}</p>${t.refs.map(([b, c, v, end = v]) => `<section class="passage"><div class="passage-head"><span>${esc(refLabel(b, c, v))}${end !== v ? "–" + end : ""}</span><button class="text-button" data-action="jump" data-key="${keyOf(b, c, v)}">Read chapter ›</button></div><article class="verses">${rangeHtml(b, c, v, end)}</article></section>`).join("")}</div>`;
-    $("allTopics").onclick = () => {
-      wisdomTopic = null;
-      renderWisdom();
-    };
+    $("allTopics").onclick = returnToTopics;
   }
   pane.scrollTop = 0;
 }
@@ -566,7 +574,9 @@ function closeDialog() {
   searchGeneration++;
   if (dialog.open) dialog.close();
 }
-function openDialog(title, html) {
+let dialogBack = null;
+function openDialog(title, html, back = null) {
+  dialogBack = back;
   dialog.classList.remove("chapter-drawer");
   searchGeneration++;
   $("dialogTitle").textContent = title;
@@ -637,8 +647,20 @@ function swipeDirection(dx, dy) {
     ? Math.sign(dx)
     : 0;
 }
+function backAction() {
+  if (dialog.open) return dialogBack || closeDialog;
+  if (returnPlace) return returnToPrevious;
+  if (state.tab === "wisdom" && wisdomTopic) return returnToTopics;
+  if (state.tab === "prayers" && selectedPrayer)
+    return () => {
+      selectedPrayer = null;
+      renderPrayers();
+    };
+  return null;
+}
 function bindChapterSwipe(surface, drawer) {
   let start = null,
+    onBack = null,
     axis = null,
     suppressClickUntil = 0;
   surface.addEventListener(
@@ -646,11 +668,12 @@ function bindChapterSwipe(surface, drawer) {
     (event) => {
       start = null;
       axis = null;
+      onBack = backAction();
       if (
         event.touches.length !== 1 ||
         (drawer
-          ? !dialog.classList.contains("chapter-drawer")
-          : dialog.open || state.tab !== "bible")
+          ? !dialog.open
+          : dialog.open || (state.tab !== "bible" && !onBack))
       )
         return;
       if (event.target.closest("button, input, textarea, a, summary")) return;
@@ -687,10 +710,12 @@ function bindChapterSwipe(surface, drawer) {
         ? swipeDirection(touch.clientX - start.x, touch.clientY - start.y)
         : 0;
       start = null;
-      if ((!drawer && direction === -1) || (drawer && direction === 1)) {
+      if (direction === 1 && onBack) {
         suppressClickUntil = Date.now() + 400;
-        if (drawer) closeDialog();
-        else showChapterDrawer();
+        onBack();
+      } else if (!drawer && direction === -1 && state.tab === "bible") {
+        suppressClickUntil = Date.now() + 400;
+        showChapterDrawer();
       }
     },
     { passive: true },
@@ -716,6 +741,7 @@ function showChapters(book) {
     displayName(book),
     `<button class="text-button" id="backBooks">‹ All books</button><p class="helper">Choose a chapter</p><div class="chapter-grid">${Array.from({ length: bookMeta(book).n }, (_, i) => `<button class="book-button" data-chapter="${i + 1}" data-chapter-book="${book}" ${state.book === book && state.chapter === i + 1 ? 'aria-current="true"' : ""}>${i + 1}</button>`).join("")}</div>`,
   );
+  dialogBack = showBooks;
   $("backBooks").onclick = showBooks;
 }
 function parseRef(raw) {
@@ -769,7 +795,7 @@ async function runSearch() {
   if (!query) return;
   const ref = parseRef(query);
   if (ref) {
-    goChapter(ref.book, ref.ch, ref.v);
+    visitPassage(ref.book, ref.ch, ref.v);
     return;
   }
   if (/\d\s*:\s*\d/.test(query) || /^psalms?\s+\d+$/i.test(query)) {
@@ -883,12 +909,26 @@ function showVerse(book, ch, v) {
     }
   };
 }
+function visitPassage(book, ch, v) {
+  const previous = {
+    book: state.book,
+    ch: state.chapter,
+    top: pane.scrollTop,
+    tab: state.tab,
+    previous: returnPlace,
+  };
+  goChapter(book, ch, v);
+  returnPlace = previous;
+  $("returnReading").hidden = false;
+}
 function jumpNote(book, ch, v) {
+  const priorReturn = returnPlace;
   returnPlace = {
     book: state.book,
     ch: state.chapter,
     top: pane.scrollTop,
     tab: state.tab,
+    previous: priorReturn,
   };
   const previous = returnPlace;
   if (state.tab !== "bible" || state.book !== book || state.chapter !== ch) {
@@ -913,8 +953,9 @@ function showSettings() {
       )
       .join(
         "",
-      )}<h3 class="section-label">Reading guides</h3><button class="text-button" data-essay="how-to-read">How to read the Bible ›</button><br><button class="text-button" data-essay="typology">How Scripture speaks of Christ ›</button><p class="helper">World English Bible with deuterocanon, arranged in Orthodox Study Bible book order. Study notes are original; this is not the printed Orthodox Study Bible. Bookmarks, highlights, and comments are saved in this browser.</p>`,
+      )}<h3 class="section-label">Personal study notes</h3><p class="helper" id="personalNotesStatus">${personalNotesCount ? `${personalNotesCount.toLocaleString()} imported notes stored on this device.` : "Import your study notes to display them beneath each chapter, even offline."}</p><label class="text-button" for="personalNotesFile">Import study notes</label><input id="personalNotesFile" type="file" accept=".json,application/json"><p class="helper">Choose your orthobible-study-notes.json file. It stays on this device.</p><h3 class="section-label">Reading guides</h3><button class="text-button" data-essay="how-to-read">How to read the Bible ›</button><br><button class="text-button" data-essay="typology">How Scripture speaks of Christ ›</button><p class="helper">World English Bible with deuterocanon, arranged in Orthodox Study Bible book order. Built-in study notes are original. Imported notes come from your personal copy; Bible text remains the World English Bible. Bookmarks, highlights, and comments are saved in this browser.</p>`,
   );
+  $("personalNotesFile").onchange = importPersonalNotes;
   const font = (delta) => {
     rememberScroll();
     state.font = Math.max(16, Math.min(28, state.font + delta));
@@ -956,6 +997,7 @@ function showEssay(id) {
     e.title,
     `<div class="essay"><button class="text-button" id="backSettings">‹ Reading settings</button><p>${esc(e.lead)}</p>${e.sections.map((s) => `<h3>${esc(s.h)}</h3><p>${esc(s.p)}</p>`).join("")}</div>`,
   );
+  dialogBack = showSettings;
   $("backSettings").onclick = showSettings;
 }
 function handleAction(event) {
@@ -970,12 +1012,13 @@ function handleAction(event) {
   if (button.dataset.action) {
     const p = parseKey(button.dataset.key);
     if (button.dataset.action === "verse") showVerse(p.book, p.ch, p.v);
-    else if (button.dataset.action === "jump") goChapter(p.book, p.ch, p.v);
+    else if (button.dataset.action === "jump") visitPassage(p.book, p.ch, p.v);
     else jumpNote(p.book, p.ch, p.v);
   } else if (button.dataset.book) showChapters(button.dataset.book);
   else if (button.dataset.chapter)
     goChapter(button.dataset.chapterBook, +button.dataset.chapter);
   else if (button.dataset.topic) {
+    wisdomListTop = pane.scrollTop;
     wisdomTopic = window.WISDOM.categories
       .flatMap((c) => c.topics)
       .find((t) => t.id === button.dataset.topic);
@@ -1029,14 +1072,20 @@ dialog.addEventListener("click", (e) => {
 document
   .querySelectorAll("[data-tab]")
   .forEach((button) => (button.onclick = () => openTab(button.dataset.tab)));
-$("returnReading").onclick = () => {
+function returnToPrevious() {
   const r = returnPlace;
   if (!r) return;
-  returnPlace = null;
-  $("returnReading").hidden = true;
+  returnPlace = r.previous || null;
+  $("returnReading").hidden = !returnPlace;
   if (r.tab === "wisdom") {
     selectTab("wisdom");
     renderWisdom();
+  } else if (r.tab === "saved") {
+    selectTab("saved");
+    renderSaved();
+  } else if (r.tab === "prayers") {
+    selectTab("prayers");
+    renderPrayers();
   } else {
     state.book = r.book;
     state.chapter = r.ch;
@@ -1046,7 +1095,8 @@ $("returnReading").onclick = () => {
   pane.scrollTop = r.top;
   rememberScroll();
   persist();
-};
+}
+$("returnReading").onclick = returnToPrevious;
 document.addEventListener("keydown", (e) => {
   if (
     dialog.open ||
@@ -1100,6 +1150,7 @@ if (window.BIBLE?.t) {
   else if (state.tab === "wisdom") renderWisdom();
   else if (state.tab === "prayers") renderPrayers();
   else renderSaved();
+  restorePersonalNotes();
   if ("serviceWorker" in navigator)
     navigator.serviceWorker.register("./sw.js").catch(() => {});
 } else

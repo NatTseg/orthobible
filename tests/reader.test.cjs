@@ -51,6 +51,7 @@ function reader(stored = {}) {
     "prayers-data.js",
   ])
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context);
+  vm.runInContext(fs.readFileSync(path.join(root, "personal-notes.js"), "utf8"), context);
   const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
   // Bind functions and event handlers, without rendering the initial browser view.
   vm.runInContext(
@@ -130,7 +131,7 @@ test("activation deletes only old orthobible caches", async () => {
         "unrelated-app-v1",
         "orthodox-bible-v13",
         "orthodox-bible-v18",
-        "orthodox-bible-v19",
+        "orthodox-bible-v20",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -230,4 +231,65 @@ test('prayer book entries have unique IDs and available text', () => {
   assert.equal(run('PRAYERS.length'), 8);
   assert.equal(run('new Set(PRAYERS.map(p => p.id)).size'), 8);
   assert.equal(run('PRAYERS.every(p => p.title && (p.text?.trim() || chapterText(p.book, p.chapter).length > 1))'), true);
+});
+
+test('footer navigation always opens the main section and clears nested return state', () => {
+  const run = reader();
+  for (const tab of ['wisdom', 'prayers', 'saved', 'bible']) {
+    run(`wisdomTopic = WISDOM.categories[0].topics[0]; selectedPrayer = PRAYERS[0].id; prayerListTop = 180; wisdomListTop = 120; savedFilter = 'comments'; returnPlace = {tab:'wisdom'}; openTab('${tab}');`);
+    assert.equal(run('state.tab'), tab);
+    assert.equal(run('wisdomTopic'), null);
+    assert.equal(run('selectedPrayer'), null);
+    assert.equal(run('savedFilter'), 'all');
+    assert.equal(run('returnPlace'), null);
+  }
+});
+
+test('right swipe returns from a prayer and ignores vertical scrolling, short drags, and controls', () => {
+  const run = reader();
+  run(`window.handlers = {}; window.surface = {addEventListener(name, fn) {handlers[name]=fn;}}; bindChapterSwipe(surface, false);
+    window.swipe = (dx, dy, control=false) => {
+      handlers.touchstart({touches:[{clientX:80,clientY:200}],target:{closest:()=>control}});
+      handlers.touchmove({touches:[{clientX:80+dx,clientY:200+dy}],cancelable:true,preventDefault(){}});
+      handlers.touchend({changedTouches:[{clientX:80+dx,clientY:200+dy}]});
+    }; state.tab='prayers'; selectedPrayer=PRAYERS[0].id; prayerListTop=75;`);
+  for (const gesture of ['swipe(20,0)', 'swipe(80,100)', 'swipe(150,5,true)', 'swipe(-150,5)']) {
+    run(gesture);
+    assert.notEqual(run('selectedPrayer'), null);
+  }
+  run('swipe(150,5)');
+  assert.equal(run('selectedPrayer'), null);
+  assert.equal(run('pane.scrollTop'), 75);
+});
+
+test('linked passages return to the originating Wisdom topic and saved filter', () => {
+  const run = reader();
+  run(`window.requestAnimationFrame = () => {}; state.tab='wisdom'; wisdomTopic=WISDOM.categories[0].topics[0]; pane.scrollTop=123; visitPassage('JHN',3,16); backAction()();`);
+  assert.equal(run('state.tab'), 'wisdom');
+  assert.equal(run('wisdomTopic.id'), run('WISDOM.categories[0].topics[0].id'));
+  assert.equal(run('pane.scrollTop'), 123);
+  run(`state.tab='saved'; savedFilter='comments'; pane.scrollTop=42; visitPassage('JHN',1,1); backAction()();`);
+  assert.equal(run('state.tab'), 'saved');
+  assert.equal(run('savedFilter'), 'comments');
+  assert.equal(run('pane.scrollTop'), 42);
+});
+
+test('nested dialogs use their parent action before dismissing the overlay', () => {
+  const run = reader();
+  run(`dialog.open=true; window.returned=false; dialogBack=()=>{window.returned=true;}; backAction()();`);
+  assert.equal(run('window.returned'), true);
+  run('dialogBack=null');
+  assert.equal(run('backAction() === closeDialog'), true);
+});
+
+test('personal notes validate data, render safely, and leave saved verses untouched', () => {
+  const run = reader({bookmarks:[{book:'JHN',chapter:3,verse:16}],comments:{'JHN:3:16':'My note'}});
+  run(`loadPrefs(); window.imported = validatePersonalNotes({notes:{'JHN:1:1':{body:'<script>alert(1)</script>\\nSecond paragraph', title:'Personal note'}},preambles:{JHN:{body:'Introduction'}}}); applyPersonalNotes(imported);`);
+  assert.equal(run('personalNotesCount'), 1);
+  assert.equal(run('state.bookmarks.length'), 1);
+  assert.equal(run('state.comments["JHN:3:16"]'), 'My note');
+  assert.match(run('notesHtml()'), /&lt;script&gt;/);
+  assert.match(run('verseHtml("JHN",1,1)'), /Study note for verse 1/);
+  assert.throws(() => run(`validatePersonalNotes({notes:{'BAD:1:1':{body:'Invalid'}}})`));
+  assert.throws(() => run(`validatePersonalNotes({notes:{}})`));
 });

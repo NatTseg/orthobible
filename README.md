@@ -8,12 +8,14 @@ A simple, offline Scripture reader. World English Bible with deuterocanon in Ort
 - **Search:** enter a reference such as John 3:16 or a phrase such as “love one another.”
 - **Wisdom:** browse passages by topic.
 - **Prayers:** a simple prayer book with eight prayers and Psalm text, available offline.
+- **Personal study notes:** import your `orthobible-study-notes.json` in Reading settings to store your notes and introductions on this device for offline use. Notes appear beneath each chapter and link from the corresponding verses.
 - **Saved:** filter your bookmarks, highlights, and comments.
+- **Go back:** swipe right from a prayer, Wisdom topic, reading guide, book picker, or linked passage to return to its parent view.
 - **Reading settings:** change text size, light/dark appearance, introductions, and notes.
 
-Preferences and saved verses remain in this browser. Existing `obible3` data is preserved across the redesign. Calendar and Hours sections have been removed.
+Footer buttons always open their section’s main view. Preferences, saved verses, and imported study notes remain in this browser. Existing `obible3` data is preserved across the redesign. Calendar and Hours sections have been removed.
 
-The printed Orthodox Study Bible (NKJV / St. Athanasius Academy Septuagint and copyrighted notes) is not copied here. Introductions and verse notes are original.
+The printed Orthodox Study Bible (NKJV / St. Athanasius Academy Septuagint and copyrighted notes) is not copied here. Built-in introductions and verse notes are original; users can import notes from their own copy without uploading them to this repository.
 
 ## Local preview
 
