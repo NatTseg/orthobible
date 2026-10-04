@@ -1,8 +1,9 @@
-const CACHE = "orthodox-bible-v23";
+const CACHE = "orthodox-bible-v24";
 const ASSETS = [
   "./",
   "./index.html",
   "./app.js",
+  "./swipe.js",
   "./personal-notes.js",
   "./prayers-data.js",
   "./styles.css",

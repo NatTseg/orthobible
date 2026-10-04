@@ -10,7 +10,7 @@ A simple, offline Scripture reader. LXX2012 Septuagint Old Testament with the Wo
 - **Prayers:** a simple prayer book with eight prayers and Psalm text, available offline.
 - **Personal study notes:** import your `orthobible-study-notes.json` in Reading settings to store your notes and introductions on this device for offline use. New Testament notes link from verses. Original Old Testament notes remain accessible below chapters in a reference browser; their alignment with LXX2012 is explicitly unverified.
 - **Saved:** filter your bookmarks, highlights, and comments.
-- **Go back:** swipe right from a prayer, Wisdom topic, reading guide, book picker, or linked passage to return to its parent view.
+- **Go back:** drag right from a prayer, Wisdom topic, reading guide, book picker, or linked passage. The current view slides with your finger and reveals its parent. Release beyond roughly one third of the view to go back; a short drag, reversal, or touch cancellation restores the current view.
 - **Reading settings:** change text size, light/dark appearance, introductions, and notes.
 
 Footer buttons always open their section’s main view. Preferences, saved verses, and imported study notes remain in this browser. Existing `obible3` data is preserved across the redesign. Calendar and Hours sections have been removed.

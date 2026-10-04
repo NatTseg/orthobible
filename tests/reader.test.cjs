@@ -49,6 +49,7 @@ function reader(stored = {}) {
     "bible-data.js",
     "legacy-web-data.js",
     "edition.js",
+    "swipe.js",
     "study-data.js",
     "wisdom-data.js",
     "prayers-data.js",
@@ -135,7 +136,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v13",
         "orthodox-bible-v18",
         "orthodox-bible-v20",
-        "orthodox-bible-v23",
+        "orthodox-bible-v24",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -255,7 +256,7 @@ test('footer navigation always opens the main section and clears nested return s
 
 test('right swipe returns from a prayer and ignores vertical scrolling, short drags, and controls', () => {
   const run = reader();
-  run(`window.handlers = {}; window.surface = {addEventListener(name, fn) {handlers[name]=fn;}}; bindChapterSwipe(surface, false);
+  run(`beginBackSlide = () => ({width:390,update(){},cancel(){},finish(commit, action){if(commit)action();}}); window.handlers = {}; window.surface = {addEventListener(name, fn) {handlers[name]=fn;}}; bindChapterSwipe(surface, false);
     window.swipe = (dx, dy, control=false) => {
       handlers.touchstart({touches:[{clientX:80,clientY:200}],target:{closest:()=>control}});
       handlers.touchmove({touches:[{clientX:80+dx,clientY:200+dy}],cancelable:true,preventDefault(){}});
@@ -370,4 +371,53 @@ test('unaligned original OT notes stay available without being attached to LXX v
   assert.match(run('notesHtml()'), /Read notes for this book/);
   assert.match(run('notesHtml()'), /has not been verified/);
   assert.equal(run('STUDY.notes["DAG:3:24"].body'), 'Daniel note');
+});
+
+test('back commit requires distance and rejects a deliberate reversal', () => {
+  const run = reader();
+  assert.equal(run('shouldCommitBack(60,60,390)'), false);
+  assert.equal(run('shouldCommitBack(150,150,390)'), true);
+  assert.equal(run('shouldCommitBack(180,260,390)'), false);
+  assert.equal(run('shouldCommitBack(200,210,390)'), true);
+  assert.equal(run('shouldCommitBack(150,150,1000)'), false);
+});
+
+test('sliding back previews movement and commits only after the settling callback', () => {
+  const run = reader();
+  run(`window.handlers={};window.distance=0;window.settled=null;
+    beginBackSlide=()=>({width:390,update(x){window.distance=x;},cancel(){},finish(commit,action){window.settled={commit,action};}});
+    bindChapterSwipe({addEventListener(name,fn){handlers[name]=fn;}},false);
+    state.tab='prayers';selectedPrayer=PRAYERS[0].id;
+    window.start=()=>handlers.touchstart({touches:[{clientX:50,clientY:100}],target:{closest:()=>false}});
+    window.move=x=>handlers.touchmove({touches:[{clientX:x,clientY:103}],cancelable:true,preventDefault(){}});
+    window.end=x=>handlers.touchend({changedTouches:[{clientX:x,clientY:103}]});
+    start();move(250);`);
+  assert.equal(run('window.distance'), 200);
+  assert.notEqual(run('selectedPrayer'), null);
+  run('end(250)');
+  assert.equal(run('settled.commit'), true);
+  assert.notEqual(run('selectedPrayer'), null);
+  run('settled.action()');
+  assert.equal(run('selectedPrayer'), null);
+});
+
+test('short drags, reversing, touch cancellation, and multiple fingers never navigate', () => {
+  const run = reader();
+  run(`window.handlers={};window.lastCommit=null;
+    beginBackSlide=()=>({width:390,update(){},cancel(){},finish(commit){window.lastCommit=commit;}});
+    bindChapterSwipe({addEventListener(name,fn){handlers[name]=fn;}},false);
+    state.tab='prayers';selectedPrayer=PRAYERS[0].id;
+    window.start=()=>handlers.touchstart({touches:[{clientX:50,clientY:100}],target:{closest:()=>false}});
+    window.move=x=>handlers.touchmove({touches:[{clientX:x,clientY:103}],cancelable:true,preventDefault(){}});
+    window.end=x=>handlers.touchend({changedTouches:[{clientX:x,clientY:103}]});`);
+  for (const gesture of [
+    'start();move(110);end(110)',
+    'start();move(330);move(240);end(240)',
+    'start();move(330);handlers.touchcancel()',
+    'start();move(330);handlers.touchmove({touches:[{},{}]})',
+  ]) {
+    run(gesture);
+    assert.equal(run('window.lastCommit'), false);
+    assert.notEqual(run('selectedPrayer'), null);
+  }
 });

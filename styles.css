@@ -978,3 +978,32 @@ textarea {
 
 .translation-label { font-size: 11px; color: var(--muted); margin: -8px 0 20px; }
 #originalNoteBook, #originalNoteChapter { display: block; width: 100%; padding: 10px; margin: 6px 0 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+
+/* Inert back previews keep the real page, scroll position and form state untouched. */
+.swipe-stage {
+  position: fixed;
+  z-index: 20;
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+  background: var(--bg);
+}
+.swipe-view {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  margin: 0;
+  background: var(--bg);
+  box-sizing: border-box;
+  will-change: transform;
+}
+.swipe-current { box-shadow: -8px 0 24px #0002; }
+dialog.swipe-dismiss { animation: none; will-change: transform; }
+dialog.swipe-dismiss::backdrop {
+  background: rgb(21 25 20 / calc(.44 * (1 - var(--back-progress, 0))));
+  backdrop-filter: blur(calc(3px * (1 - var(--back-progress, 0))));
+}
+dialog.swipe-settling::backdrop { transition: background .2s ease, backdrop-filter .2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  dialog.swipe-settling::backdrop { transition: none; }
+}

@@ -393,6 +393,7 @@ function selectTab(tab) {
   });
 }
 function openTab(tab) {
+  cancelBackSlide();
   wisdomTopic = null;
   wisdomListTop = 0;
   selectedPrayer = null;
@@ -410,6 +411,7 @@ function openTab(tab) {
   persist();
 }
 function goChapter(book, ch, verse = null) {
+  cancelBackSlide();
   if (!bookMeta(book) || ch < 1 || ch > bookMeta(book).n) return;
   rememberScroll();
   state.book = book;
@@ -492,6 +494,7 @@ function notesHtml() {
     .join("")}</section>`;
 }
 function renderChapter(scroll = 0) {
+  cancelBackSlide();
   $("reference").textContent = refLabel(state.book, state.chapter);
   $("previous").disabled = !adjacent(-1);
   $("next").disabled = !adjacent(1);
@@ -510,6 +513,7 @@ function returnToTopics() {
   pane.scrollTop = wisdomListTop;
 }
 function renderWisdom() {
+  cancelBackSlide();
   if (!wisdomTopic) {
     pane.innerHTML = `<div class="content"><p class="eyebrow">Scripture for everyday life</p><h1>Wisdom</h1><p class="subtitle">Find a passage for what’s on your mind.</p>${window.WISDOM.categories.map((c) => `<h2 class="section-label">${esc(c.label)}</h2><div class="topic-grid">${c.topics.map((t) => `<button class="topic" data-topic="${t.id}">${esc(t.title)}${icon("right")}</button>`).join("")}</div>`).join("")}</div>`;
   } else {
@@ -522,6 +526,7 @@ function renderWisdom() {
 let selectedPrayer = null;
 let prayerListTop = 0;
 function renderPrayers() {
+  cancelBackSlide();
   const prayer = window.PRAYERS.find((p) => p.id === selectedPrayer);
   if (!prayer) {
     pane.innerHTML = `<div class="content"><p class="eyebrow">Daily prayer</p><h1>Prayer Book</h1><p class="subtitle">A collection of prayers to return to each day.</p><div class="prayer-list">${window.PRAYERS.map((p) => `<button class="topic" data-prayer="${p.id}"><span>${esc(p.title)}</span>${icon("right")}</button>`).join("")}</div></div>`;
@@ -542,6 +547,7 @@ function renderPrayers() {
   };
 }
 function renderSaved() {
+  cancelBackSlide();
   const bookmarkKeys = state.bookmarks
     .slice()
     .sort((a, b) => b.ts - a.ts)
@@ -586,11 +592,15 @@ function renderSaved() {
   pane.scrollTop = 0;
 }
 function closeDialog() {
+  cancelBackSlide();
   searchGeneration++;
   if (dialog.open) dialog.close();
 }
-let dialogBack = null;
+let dialogBack = null, dialogBackSnapshot = null;
+let wisdomBackSnapshot = null, prayerBackSnapshot = null;
 function openDialog(title, html, back = null) {
+  cancelBackSlide();
+  dialogBackSnapshot = null;
   dialogBack = back;
   dialog.classList.remove("chapter-drawer");
   searchGeneration++;
@@ -673,90 +683,16 @@ function backAction() {
     };
   return null;
 }
-function bindChapterSwipe(surface, drawer) {
-  let start = null,
-    onBack = null,
-    axis = null,
-    suppressClickUntil = 0;
-  surface.addEventListener(
-    "touchstart",
-    (event) => {
-      start = null;
-      axis = null;
-      onBack = backAction();
-      if (
-        event.touches.length !== 1 ||
-        (drawer
-          ? !dialog.open
-          : dialog.open || (state.tab !== "bible" && !onBack))
-      )
-        return;
-      if (event.target.closest("button, input, textarea, a, summary")) return;
-      start = { x: event.touches[0].clientX, y: event.touches[0].clientY };
-    },
-    { passive: true },
-  );
-  surface.addEventListener(
-    "touchmove",
-    (event) => {
-      if (!start) return;
-      if (event.touches.length !== 1) {
-        start = null;
-        return;
-      }
-      const dx = event.touches[0].clientX - start.x,
-        dy = event.touches[0].clientY - start.y;
-      if (!axis && Math.max(Math.abs(dx), Math.abs(dy)) > 12)
-        axis = Math.abs(dx) > Math.abs(dy) * 1.6 ? "x" : "y";
-      if (axis === "y") {
-        start = null;
-        return;
-      }
-      if (axis === "x" && event.cancelable) event.preventDefault();
-    },
-    { passive: false },
-  );
-  surface.addEventListener(
-    "touchend",
-    (event) => {
-      if (!start) return;
-      const touch = event.changedTouches[0];
-      const direction = touch
-        ? swipeDirection(touch.clientX - start.x, touch.clientY - start.y)
-        : 0;
-      start = null;
-      if (direction === 1 && onBack) {
-        suppressClickUntil = Date.now() + 400;
-        onBack();
-      } else if (!drawer && direction === -1 && state.tab === "bible") {
-        suppressClickUntil = Date.now() + 400;
-        showChapterDrawer();
-      }
-    },
-    { passive: true },
-  );
-  surface.addEventListener("touchcancel", () => {
-    start = null;
-  });
-  surface.addEventListener(
-    "click",
-    (event) => {
-      if (Date.now() < suppressClickUntil) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    },
-    true,
-  );
-}
 bindChapterSwipe(pane, false);
 bindChapterSwipe(dialog, true);
 function showChapters(book) {
+  const parentView = captureSwipeView(dialog);
   openDialog(
     displayName(book),
     `<button class="text-button" id="backBooks">‹ All books</button><p class="helper">Choose a chapter</p><div class="chapter-grid">${Array.from({ length: bookMeta(book).n }, (_, i) => `<button class="book-button" data-chapter="${i + 1}" data-chapter-book="${book}" ${state.book === book && state.chapter === i + 1 ? 'aria-current="true"' : ""}>${i + 1}</button>`).join("")}</div>`,
   );
   dialogBack = showBooks;
+  dialogBackSnapshot = parentView;
   $("backBooks").onclick = showBooks;
 }
 function parseRef(raw) {
@@ -932,6 +868,7 @@ function visitPassage(book, ch, v) {
     top: pane.scrollTop,
     tab: state.tab,
     previous: returnPlace,
+    snapshot: captureSwipeView(pane),
   };
   goChapter(book, ch, v);
   returnPlace = previous;
@@ -945,6 +882,7 @@ function jumpNote(book, ch, v) {
     top: pane.scrollTop,
     tab: state.tab,
     previous: priorReturn,
+    snapshot: captureSwipeView(pane),
   };
   const previous = returnPlace;
   if (state.tab !== "bible" || state.book !== book || state.chapter !== ch) {
@@ -1009,11 +947,13 @@ function showSettings() {
 function showEssay(id) {
   const e = window.STUDY?.essays?.[id];
   if (!e) return;
+  const parentView = captureSwipeView(dialog);
   openDialog(
     e.title,
     `<div class="essay"><button class="text-button" id="backSettings">‹ Reading settings</button><p>${esc(e.lead)}</p>${e.sections.map((s) => `<h3>${esc(s.h)}</h3><p>${esc(s.p)}</p>`).join("")}</div>`,
   );
   dialogBack = showSettings;
+  dialogBackSnapshot = parentView;
   $("backSettings").onclick = showSettings;
 }
 function handleAction(event) {
@@ -1022,6 +962,7 @@ function handleAction(event) {
   if (button.dataset.legacyKey) { showLegacySaved(button.dataset.legacyKey); return; }
   if (button.dataset.studyBook) { showOriginalStudyNotes(button.dataset.studyBook); return; }
   if (button.dataset.prayer) {
+    prayerBackSnapshot = captureSwipeView(pane);
     prayerListTop = pane.scrollTop;
     selectedPrayer = button.dataset.prayer;
     renderPrayers();
@@ -1036,6 +977,7 @@ function handleAction(event) {
   else if (button.dataset.chapter)
     goChapter(button.dataset.chapterBook, +button.dataset.chapter);
   else if (button.dataset.topic) {
+    wisdomBackSnapshot = captureSwipeView(pane);
     wisdomListTop = pane.scrollTop;
     wisdomTopic = window.WISDOM.categories
       .flatMap((c) => c.topics)
