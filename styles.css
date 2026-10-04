@@ -1,5 +1,6 @@
 :root {
   color-scheme: light;
+  background: var(--bg);
   --bg: #f8f6f0;
   --surface: #fffdf8;
   --text: #302e29;
@@ -71,6 +72,7 @@ button {
   display: none !important;
 }
 .app {
+  background: var(--bg);
   height: var(--app-height, 100dvh);
   max-width: 1000px;
   margin: auto;
@@ -941,25 +943,10 @@ textarea {
   }
 }
 
-/* Anchor the shell to the screen, including Safari toolbar/standalone transitions. */
-html,
-body {
-  position: fixed;
-  inset: 0;
-}
+/* Fill the dynamic viewport; use the measured height only while typing. */
 .app {
   position: fixed;
   inset: 0 0 auto;
-  height: min(100dvh, var(--app-height, 100dvh));
-}
-dialog {
-  max-height: calc(
-    min(100dvh, var(--app-height, 100dvh)) - env(safe-area-inset-top, 0px) - 8px
-  );
-}
-dialog.chapter-drawer {
-  height: min(100dvh, var(--app-height, 100dvh));
-  max-height: min(100dvh, var(--app-height, 100dvh));
 }
 .prayer-list {
   display: flex;

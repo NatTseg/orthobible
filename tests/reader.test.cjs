@@ -10,7 +10,7 @@ function reader(stored = {}) {
     querySelectorAll() {
       return [];
     },
-    style: { setProperty() {} },
+    style: { setProperty() {}, removeProperty() {} },
     classList: { add() {}, remove() {} },
     dataset: {},
   });
@@ -132,7 +132,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v13",
         "orthodox-bible-v18",
         "orthodox-bible-v20",
-        "orthodox-bible-v21",
+        "orthodox-bible-v22",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -215,16 +215,20 @@ test("chapter swipe requires a deliberate horizontal movement", () => {
   assert.equal(run("swipeDirection(-80, 60)"), 0);
 });
 
-test("viewport fit follows the keyboard and restores responsive height without overriding zoom", () => {
+test("viewport fit uses CSS full height except during keyboard input, preserving zoom", () => {
   const run = reader();
-  run(
-    "document.documentElement.style.setProperty = (name, value) => window.testHeight = value; window.innerHeight = 844; window.visualViewport = {height: 360, scale: 1}; fitViewport();",
-  );
+  run(`document.documentElement.style.setProperty = (name, value) => window.testHeight = value;
+    document.documentElement.style.removeProperty = () => window.testHeight = null;
+    window.innerHeight = 844; window.visualViewport = {height: 766, scale: 1}; fitViewport();`);
+  assert.equal(run("window.testHeight"), null, "safe-area exclusions must not shrink the app");
+  run(`document.activeElement = {tagName:'INPUT'}; window.visualViewport.height = 360; fitViewport();`);
   assert.equal(run("window.testHeight"), "360px");
-  run("window.visualViewport.height = 844; fitViewport();");
-  assert.equal(run("window.testHeight"), "844px");
-  run("window.visualViewport = {height: 422, scale: 2}; fitViewport();");
-  assert.equal(run("window.testHeight"), "844px");
+  run("window.visualViewport = {height: 180, scale: 2}; fitViewport();");
+  assert.equal(run("window.testHeight"), "360px", "pinch zoom leaves the layout alone");
+  run("window.visualViewport = {height: 766, scale: 1}; fitViewport();");
+  assert.equal(run("window.testHeight"), null, "keyboard dismissal restores CSS viewport sizing");
+  run("window.visualViewport.height = 360; fitViewport(); document.activeElement = null; fitViewport();");
+  assert.equal(run("window.testHeight"), null, "blur releases a stale keyboard height");
 });
 
 test('prayer book entries have unique IDs and available text', () => {

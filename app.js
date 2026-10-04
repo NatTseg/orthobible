@@ -1118,15 +1118,19 @@ document.addEventListener("keydown", (e) => {
     nextChapter(1);
   }
 });
-// Follow the visible screen when browser bars or the on-screen keyboard resize it.
-// Leave pinch zoom alone so magnification remains accessible.
+// CSS follows browser chrome and standalone safe areas. Only override its height
+// when an on-screen keyboard visibly reduces the viewport. Do not resize for zoom.
 function fitViewport() {
   const viewport = window.visualViewport;
   if (viewport && Math.abs(viewport.scale - 1) > 0.01) return;
-  document.documentElement.style.setProperty(
-    "--app-height",
-    `${viewport ? viewport.height : window.innerHeight}px`,
-  );
+  const active = document.activeElement;
+  const editing = active &&
+    (["INPUT", "TEXTAREA"].includes(active.tagName) || active.isContentEditable);
+  if (viewport && editing && window.innerHeight - viewport.height > 120) {
+    document.documentElement.style.setProperty("--app-height", `${viewport.height}px`);
+  } else {
+    document.documentElement.style.removeProperty("--app-height");
+  }
 }
 let viewportSettleTimer;
 function syncViewport() {
