@@ -1,4 +1,4 @@
-// Traditional prayers retained from the original prayer collection; Psalm text uses the bundled WEB.
+// Traditional prayers retained from the original prayer collection; Psalm text uses the bundled Septuagint (LXX2012).
 window.PRAYERS = [
   {
     id: "lords-prayer",
@@ -37,8 +37,8 @@ window.PRAYERS = [
   },
   {
     id: "psalm51",
-    title: "Psalm 51",
+    title: "Psalm 50 (51)",
     book: "PSA",
-    chapter: 51,
+    chapter: 50,
   },
 ];

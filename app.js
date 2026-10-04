@@ -13,11 +13,11 @@ const GROUPS = [
       "2KI",
       "1CH",
       "2CH",
+      "1ES",
       "EZR",
       "NEH",
       "TOB",
       "JDT",
-      "ESG",
       "EST",
       "1MA",
       "2MA",
@@ -49,10 +49,13 @@ const GROUPS = [
       "LAM",
       "EZK",
       "DAN",
-      "DAG",
+      "LJE",
+      "S3Y",
+      "SUS",
+      "BEL",
     ],
   },
-  { label: "Appendix", ids: ["1ES", "2ES", "MAN", "4MA"] },
+  { label: "Appendix", ids: ["MAN", "4MA"] },
   { label: "Holy Gospels", ids: ["MAT", "MRK", "LUK", "JHN"] },
   { label: "Acts", ids: ["ACT"] },
   {
@@ -284,7 +287,7 @@ function chapterText(book, ch) {
   return window.BIBLE.t[book]?.[ch - 1] || [];
 }
 function verseText(book, ch, v) {
-  return chapterText(book, ch)[v] || "";
+  return chapterText(book, ch)[sourceVerseStart(book, ch, v)] || "";
 }
 function keyOf(book, ch, v) {
   return `${book}:${ch}:${v}`;
@@ -305,6 +308,7 @@ function bookmarked(book, ch, v) {
   );
 }
 function noteAt(book, ch, v) {
+  if (isSeptuagint(book)) return null;
   return window.STUDY?.notes?.[keyOf(book, ch, v)];
 }
 function notify(message) {
@@ -328,8 +332,9 @@ function persist() {
 function loadPrefs() {
   try {
     const stored = JSON.parse(localStorage.getItem("obible3") || "{}");
-    if (stored && typeof stored === "object") Object.assign(state, stored);
+    if (stored && typeof stored === "object") Object.assign(state, migrateEdition(stored));
   } catch {}
+  if (!Array.isArray(state.legacySaved)) state.legacySaved = [];
   if (!bookMeta(state.book)) state.book = "JHN";
   if (
     !Number.isInteger(state.chapter) ||
@@ -364,6 +369,7 @@ function loadPrefs() {
     state.tab = "bible";
   state.theme = state.theme === "dark" ? "dark" : "light";
   applyAppearance();
+  persist();
 }
 function applyAppearance() {
   document.documentElement.dataset.theme = state.theme;
@@ -415,6 +421,7 @@ function goChapter(book, ch, verse = null) {
   closeDialog();
   renderChapter(0);
   persist();
+  if (verse) verse = sourceVerseStart(book, ch, verse);
   if (verse)
     requestAnimationFrame(() =>
       pane
@@ -438,13 +445,14 @@ function nextChapter(direction) {
   if (next) goChapter(next.book, next.ch);
 }
 function verseHtml(book, ch, v) {
+  v = sourceVerseStart(book, ch, v);
   const text = verseText(book, ch, v);
   if (!text) return "";
   const key = keyOf(book, ch, v),
     color = state.highlights[key],
     bm = bookmarked(book, ch, v),
     note = state.showNotes && noteAt(book, ch, v);
-  return `<div class="verse${color ? " hl-" + color : ""}${bm ? " bookmarked" : ""}" data-key="${key}" data-verse="${v}"><button class="verse-number" data-action="verse" data-key="${key}" aria-label="Actions for ${esc(refLabel(book, ch, v))}${bm ? ", bookmarked" : ""}${color ? ", highlighted" : ""}" title="Save, highlight, or comment">${v}</button><span>${esc(text)}</span>${note ? `<button class="note-link" data-action="note" data-key="${key}" aria-label="Study note for verse ${v}">Note</button>` : ""}${state.comments[key] ? `<button class="note-link" data-action="verse" data-key="${key}" aria-label="Your comment on verse ${v}">Comment</button>` : ""}</div>`;
+  return `<div class="verse${color ? " hl-" + color : ""}${bm ? " bookmarked" : ""}" data-key="${key}" data-verse="${v}"><button class="verse-number" data-action="verse" data-key="${key}" aria-label="Actions for ${esc(refLabel(book, ch, v))}${bm ? ", bookmarked" : ""}${color ? ", highlighted" : ""}" title="Save, highlight, or comment">${sourceVerseLabel(book, ch, v)}</button><span>${esc(text)}</span>${note ? `<button class="note-link" data-action="note" data-key="${key}" aria-label="Study note for verse ${v}">Note</button>` : ""}${state.comments[key] ? `<button class="note-link" data-action="verse" data-key="${key}" aria-label="Your comment on verse ${v}">Comment</button>` : ""}</div>`;
 }
 function rangeHtml(
   book,
@@ -453,12 +461,17 @@ function rangeHtml(
   end = chapterText(book, ch).length - 1,
 ) {
   let html = "";
-  for (let v = start; v <= Math.min(end, chapterText(book, ch).length - 1); v++)
-    html += verseHtml(book, ch, v);
+  const seen = new Set();
+  for (let v = start; v <= Math.min(end, chapterText(book, ch).length - 1); v++) {
+    const first = sourceVerseStart(book, ch, v);
+    if (!seen.has(first)) html += verseHtml(book, ch, first);
+    seen.add(first);
+  }
   return html;
 }
 function notesHtml() {
   if (!state.showNotes) return "";
+  if (isSeptuagint(state.book)) return legacyStudyNotesHtml(state.book);
   const entries = Object.entries(window.STUDY?.notes || {})
     .filter(([k]) => k.startsWith(`${state.book}:${state.chapter}:`))
     .sort((a, b) => parseKey(a[0]).v - parseKey(b[0]).v);
@@ -471,6 +484,7 @@ function notesHtml() {
         )
           .map((k) => {
             const p = parseKey(k);
+            if (isSeptuagint(p.book) || window.LEGACY_WEB?.t[p.book]) return `<span class="helper">Original reference: ${esc(originalBookName(p.book))} ${p.ch}:${p.v} (previous numbering)</span>`;
             return `<button class="text-button" data-action="jump" data-key="${k}">${esc(refLabel(p.book, p.ch, p.v))}</button>`;
           })
           .join("")}</article>`,
@@ -486,7 +500,7 @@ function renderChapter(scroll = 0) {
     p && state.showPreamble
       ? `<details class="introduction"><summary>About ${esc(displayName(state.book))}</summary><p>${esc(p.body)}</p><p><strong>Author.</strong> ${esc(p.author)}<br><strong>Setting.</strong> ${esc(p.date)}<br><strong>Theme.</strong> ${esc(p.theme)}</p><p>${esc(p.outline)}</p></details>`
       : "";
-  pane.innerHTML = `<div class="content"><p class="eyebrow">${esc(displayName(state.book))}</p><div class="chapter-heading"><h1>${state.book === "PS2" ? "Psalm 151" : "Chapter " + state.chapter}</h1><span>Tap a verse number to save</span></div>${intro}<article class="verses">${rangeHtml(state.book, state.chapter)}</article><div class="chapter-end"><button class="secondary" data-direction="-1" ${!adjacent(-1) ? "disabled" : ""}>Previous</button><button class="secondary" data-direction="1" ${!adjacent(1) ? "disabled" : ""}>Next chapter</button></div>${notesHtml()}</div>`;
+  pane.innerHTML = `<div class="content"><p class="eyebrow">${esc(displayName(state.book))}</p><div class="chapter-heading"><h1>${state.book === "PS2" ? "Psalm 151" : "Chapter " + state.chapter}</h1><span>Tap a verse number to save</span></div><p class="translation-label">${isSeptuagint(state.book) ? "Septuagint · LXX2012" : "World English Bible · New Testament"}</p>${intro}<article class="verses">${rangeHtml(state.book, state.chapter)}</article><div class="chapter-end"><button class="secondary" data-direction="-1" ${!adjacent(-1) ? "disabled" : ""}>Previous</button><button class="secondary" data-direction="1" ${!adjacent(1) ? "disabled" : ""}>Next chapter</button></div>${notesHtml()}</div>`;
   pane.scrollTop = scroll * (pane.scrollHeight - pane.clientHeight);
 }
 let wisdomListTop = 0;
@@ -565,8 +579,9 @@ function renderSaved() {
             return `<button class="result ${state.highlights[key] ? "hl-" + state.highlights[key] : ""}" data-action="jump" data-key="${key}"><strong>${esc(refLabel(p.book, p.ch, p.v))}</strong><p>${esc(verseText(p.book, p.ch, p.v))}</p>${state.comments[key] ? `<small>Your note: ${esc(state.comments[key])}</small>` : ""}</button>`;
           })
           .join("")
-      : `<div class="empty">${icon("bookmark")}<h2>${savedFilter === "all" ? "Your collection starts here." : "Nothing here yet."}</h2><p>Tap a verse number while reading to bookmark,<br>highlight, or leave a comment.</p><button class="secondary" id="startReading">Return to reading</button></div>`
+      : (state.legacySaved || []).length ? "" : `<div class="empty">${icon("bookmark")}<h2>${savedFilter === "all" ? "Your collection starts here." : "Nothing here yet."}</h2><p>Tap a verse number while reading to bookmark,<br>highlight, or leave a comment.</p><button class="secondary" id="startReading">Return to reading</button></div>`
   }</div>`;
+  pane.querySelector(".content")?.insertAdjacentHTML("beforeend", legacySavedHtml());
   if ($("startReading")) $("startReading").onclick = () => openTab("bible");
   pane.scrollTop = 0;
 }
@@ -762,6 +777,7 @@ function parseRef(raw) {
       ),
     )?.id;
   if (!book) return null;
+  if (!bookMeta(book)) return null;
   const ch = match ? +match[2] : 1,
     v = match?.[3] ? +match[3] : null,
     end = match?.[4] ? +match[4] : v;
@@ -953,7 +969,7 @@ function showSettings() {
       )
       .join(
         "",
-      )}<h3 class="section-label">Personal study notes</h3><p class="helper" id="personalNotesStatus">${personalNotesCount ? `${personalNotesCount.toLocaleString()} imported notes stored on this device.` : "Import your study notes to display them beneath each chapter, even offline."}</p><label class="text-button" for="personalNotesFile">Import study notes</label><input id="personalNotesFile" type="file" accept=".json,application/json"><p class="helper">Choose your orthobible-study-notes.json file. It stays on this device.</p><h3 class="section-label">Reading guides</h3><button class="text-button" data-essay="how-to-read">How to read the Bible ›</button><br><button class="text-button" data-essay="typology">How Scripture speaks of Christ ›</button><p class="helper">World English Bible with deuterocanon, arranged in Orthodox Study Bible book order. Built-in study notes are original. Imported notes come from your personal copy; Bible text remains the World English Bible. Bookmarks, highlights, and comments are saved in this browser.</p>`,
+      )}<h3 class="section-label">Personal study notes</h3><p class="helper" id="personalNotesStatus">${personalNotesCount ? `${personalNotesCount.toLocaleString()} imported notes stored on this device.` : "Import your study notes for offline reading. Original OT references are available below chapters; NT notes link from verses."}</p><label class="text-button" for="personalNotesFile">Import study notes</label><input id="personalNotesFile" type="file" accept=".json,application/json"><p class="helper">Choose your orthobible-study-notes.json file. It stays on this device.</p><h3 class="section-label">Reading guides</h3><button class="text-button" data-essay="how-to-read">How to read the Bible ›</button><br><button class="text-button" data-essay="typology">How Scripture speaks of Christ ›</button><p class="helper">Old Testament: LXX2012, Brenton’s Greek Septuagint translation with language updates. New Testament: World English Bible. Psalm numbers follow the Septuagint; source verse ranges and gaps are preserved. Imported OSB notes retain their original references, which have not all been aligned to LXX2012. Both Bible translations are public domain. <a href="https://ebible.org/eng-lxx2012/" target="_blank" rel="noopener">LXX2012 source</a> · <a href="https://ebible.org/engwebu/" target="_blank" rel="noopener">WEB source</a>. Bookmarks, highlights, and comments are saved in this browser.</p>`,
   );
   $("personalNotesFile").onchange = importPersonalNotes;
   const font = (delta) => {
@@ -1003,6 +1019,8 @@ function showEssay(id) {
 function handleAction(event) {
   const button = event.target.closest("button");
   if (!button) return;
+  if (button.dataset.legacyKey) { showLegacySaved(button.dataset.legacyKey); return; }
+  if (button.dataset.studyBook) { showOriginalStudyNotes(button.dataset.studyBook); return; }
   if (button.dataset.prayer) {
     prayerListTop = pane.scrollTop;
     selectedPrayer = button.dataset.prayer;

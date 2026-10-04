@@ -975,3 +975,6 @@ textarea {
 /* Preserve paragraph breaks in imported study notes. */
 .footnote p { white-space: pre-line; }
 #personalNotesFile { display: block; max-width: 100%; margin: 12px 0; }
+
+.translation-label { font-size: 11px; color: var(--muted); margin: -8px 0 20px; }
+#originalNoteBook, #originalNoteChapter { display: block; width: 100%; padding: 10px; margin: 6px 0 16px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; font: inherit; }

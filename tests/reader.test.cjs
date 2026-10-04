@@ -7,6 +7,7 @@ const root = path.join(__dirname, "..");
 function reader(stored = {}) {
   const element = () => ({
     addEventListener() {},
+    querySelector() { return null; },
     querySelectorAll() {
       return [];
     },
@@ -46,6 +47,8 @@ function reader(stored = {}) {
   vm.createContext(context);
   for (const file of [
     "bible-data.js",
+    "legacy-web-data.js",
+    "edition.js",
     "study-data.js",
     "wisdom-data.js",
     "prayers-data.js",
@@ -132,7 +135,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v13",
         "orthodox-bible-v18",
         "orthodox-bible-v20",
-        "orthodox-bible-v22",
+        "orthodox-bible-v23",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -313,4 +316,58 @@ test('app updates bypass stale HTTP assets when filling the offline cache', asyn
   assert.ok(assets.every(request => request.cache === 'reload'));
   assert.ok(assets.some(request => request.url === './personal-notes.js'));
   assert.ok(assets.some(request => request.url === './bible-data.js'));
+});
+
+test('all Old Testament books use LXX2012 and all 27 New Testament books retain WEB', () => {
+  const run = reader();
+  assert.equal(run('BIBLE.books.filter(b=>b.translation === "LXX2012").length'), 55);
+  assert.equal(run('BIBLE.books.filter(b=>b.translation === "WEB").length'), 27);
+  assert.equal(run('bookOrder().length'), run('BIBLE.books.length'));
+  assert.equal(run('new Set(bookOrder()).size'), run('BIBLE.books.length'));
+  assert.equal(run('bookMeta("ESG")'), undefined);
+  assert.equal(run('bookMeta("2ES")'), undefined);
+  assert.match(run('verseText("GEN",5,3)'), /two hundred and thirty/i);
+  assert.match(run('verseText("PSA",22,1)'), /Lord.*(tends|shepherd)/i);
+  assert.match(run('verseText("PSA",50,1)'), /Have mercy/i);
+  assert.match(run('verseText("JER",38,31)'), /new covenant/i);
+  assert.match(run('verseText("EST",1,1)'), /saw a vision/i);
+  assert.ok(run('verseText("SUS",1,1).length') > 0);
+  assert.ok(run('verseText("BEL",1,1).length') > 0);
+  assert.ok(run('verseText("S3Y",1,1).length') > 0);
+  assert.ok(run('verseText("LJE",1,1).length') > 0);
+});
+
+test('Septuagint verse bridges render once and accept references within their range', () => {
+  const run = reader();
+  assert.equal(run('sourceVerseStart("GEN",37,2)'), 1);
+  assert.equal(run('sourceVerseLabel("GEN",37,1)'), '1–2');
+  assert.equal(run('verseText("GEN",37,2)'), run('verseText("GEN",37,1)'));
+  assert.equal(run('(rangeHtml("GEN",37,1,2).match(/class="verse[" ]/g)||[]).length'), 1);
+  assert.match(run('rangeHtml("GEN",37,2,2)'), /data-verse="1"/);
+  assert.equal(run('parseRef("Proverbs 22:6")'), null, 'omitted source verses cannot silently resolve elsewhere');
+});
+
+test('the edition migration preserves prior Old Testament saves verbatim and is idempotent', () => {
+  const run = reader({book:'PSA',chapter:23,bookmarks:[{book:'PSA',chapter:23,verse:1,ts:1},{book:'JHN',chapter:3,verse:16,ts:2}],comments:{'PSA:23:1':'My original note','ESG:1:1':'Greek Esther note'},highlights:{'PSA:23:1':'gold'}});
+  run('loadPrefs()');
+  assert.equal(run('state.chapter'), 22);
+  assert.equal(run('state.bookmarks.length'), 1);
+  assert.equal(run('state.legacySaved.length'), 2);
+  assert.equal(run('state.legacySaved[0].text'), run('LEGACY_WEB.t.PSA[22][1]'));
+  assert.equal(run('state.legacySaved[0].comment'), 'My original note');
+  assert.equal(run('state.legacySaved[0].highlight'), 'gold');
+  assert.equal(run('state.legacySaved[1].comment'), 'Greek Esther note');
+  const before = run('JSON.stringify(state)');
+  run('Object.assign(state,migrateEdition(state))');
+  assert.equal(run('JSON.stringify(state)'), before);
+});
+
+test('unaligned original OT notes stay available without being attached to LXX verses', () => {
+  const run = reader();
+  run(`applyPersonalNotes(validatePersonalNotes({notes:{'PSA:23:1':{body:'Original Hebrew-numbered note'},'DAG:3:24':{body:'Daniel note'}},preambles:{}})); state.book='PSA'; state.chapter=22;`);
+  assert.equal(run('personalNotesCount'), 2);
+  assert.equal(run('noteAt("PSA",22,1)'), null);
+  assert.match(run('notesHtml()'), /Read notes for this book/);
+  assert.match(run('notesHtml()'), /has not been verified/);
+  assert.equal(run('STUDY.notes["DAG:3:24"].body'), 'Daniel note');
 });

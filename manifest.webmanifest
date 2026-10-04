@@ -1,7 +1,7 @@
 {
   "name": "Orthodox Bible",
   "short_name": "OrthoBible",
-  "description": "A simple offline Scripture reader with study notes, saved verses, and passages for everyday life.",
+  "description": "Offline Scripture: Septuagint Old Testament and World English Bible New Testament, with personal study notes and saved verses.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

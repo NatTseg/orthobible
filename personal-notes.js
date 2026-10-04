@@ -7,7 +7,7 @@ function validatePersonalNotes(data) {
   const notes = {}, preambles = {};
   for (const [key, note] of Object.entries(data.notes)) {
     const match = key.match(/^([A-Z0-9]{3}):(\d+):(\d+)$/);
-    if (!match || !window.BIBLE.books.some((b) => b.id === match[1]) ||
+    if (!match || ![...window.BIBLE.books, ...(window.LEGACY_WEB?.books || [])].some((b) => b.id === match[1]) ||
         +match[2] < 1 || +match[3] < 1 || !note || typeof note.body !== "string")
       throw new Error("The notes file contains an invalid verse reference or note.");
     notes[key] = {
@@ -19,7 +19,7 @@ function validatePersonalNotes(data) {
   }
   if (!Object.keys(notes).length) throw new Error("This file has no study notes.");
   for (const [key, intro] of Object.entries(data.preambles || {})) {
-    if (!window.BIBLE.books.some((b) => b.id === key) || !intro || typeof intro !== "object") continue;
+    if (![...window.BIBLE.books, ...(window.LEGACY_WEB?.books || [])].some((b) => b.id === key) || !intro || typeof intro !== "object") continue;
     preambles[key] = Object.fromEntries(
       ["author", "date", "theme", "body", "outline"].map((name) => [name, typeof intro[name] === "string" ? intro[name] : ""]),
     );
