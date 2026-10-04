@@ -114,7 +114,7 @@ test("invalid persisted data cannot break reader preferences", () => {
   assert.equal(run("state.font"), 28);
   assert.equal(run("state.bookmarks.length"), 0);
 });
-test("activation deletes only old OrthoBible caches", async () => {
+test("activation deletes only old orthobible caches", async () => {
   const handlers = {},
     deleted = [];
   let job;
@@ -130,6 +130,7 @@ test("activation deletes only old OrthoBible caches", async () => {
         "unrelated-app-v1",
         "orthodox-bible-v13",
         "orthodox-bible-v18",
+        "orthodox-bible-v19",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -144,7 +145,7 @@ test("activation deletes only old OrthoBible caches", async () => {
     },
   });
   await job;
-  assert.deepEqual(deleted, ["orthodox-bible-v13"]);
+  assert.deepEqual(deleted, ["orthodox-bible-v13", "orthodox-bible-v18"]);
 });
 
 test("offline HTML fallback is reserved for navigation within this app", async () => {
@@ -158,7 +159,7 @@ test("offline HTML fallback is reserved for navigation within this app", async (
         handlers[name] = fn;
       },
       location: { origin: "https://example.com" },
-      registration: { scope: "https://example.com/OrthoBible/" },
+      registration: { scope: "https://example.com/orthobible/" },
     },
     caches: {
       open: async () => ({
@@ -185,11 +186,11 @@ test("offline HTML fallback is reserved for navigation within this app", async (
     return response;
   };
   assert.equal(
-    await fire("https://example.com/OrthoBible/unknown", "navigate"),
+    await fire("https://example.com/orthobible/unknown", "navigate"),
     fallback,
   );
   assert.equal(
-    (await fire("https://example.com/OrthoBible/missing.js", "cors")).type,
+    (await fire("https://example.com/orthobible/missing.js", "cors")).type,
     "error",
   );
   assert.equal(fire("https://example.com/OtherApp/", "navigate"), undefined);

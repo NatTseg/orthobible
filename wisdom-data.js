@@ -1,4 +1,4 @@
-/* OrthoBible "Seek wisdom" — Scripture for the troubles, situations, and
+/* orthobible "Seek wisdom" — Scripture for the troubles, situations, and
    relationships of life. Original curation and framing lines, written for this app.
    References use the app's own book ids and Hebrew-based chapter/verse numbering. */
 window.WISDOM = {

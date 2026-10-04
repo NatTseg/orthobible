@@ -1,4 +1,6 @@
-# Orthodox Bible
+# orthobible
+
+Live: https://nattseg.github.io/orthobible/
 
 A simple, offline Scripture reader. World English Bible with deuterocanon in Orthodox Study Bible book order, original study notes, bookmarks, highlights, comments, and passages for everyday life.
 
