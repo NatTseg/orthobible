@@ -132,6 +132,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v13",
         "orthodox-bible-v18",
         "orthodox-bible-v20",
+        "orthodox-bible-v21",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -146,7 +147,7 @@ test("activation deletes only old orthobible caches", async () => {
     },
   });
   await job;
-  assert.deepEqual(deleted, ["orthodox-bible-v13", "orthodox-bible-v18"]);
+  assert.deepEqual(deleted, ["orthodox-bible-v13", "orthodox-bible-v18", "orthodox-bible-v20"]);
 });
 
 test("offline HTML fallback is reserved for navigation within this app", async () => {
@@ -292,4 +293,20 @@ test('personal notes validate data, render safely, and leave saved verses untouc
   assert.match(run('verseHtml("JHN",1,1)'), /Study note for verse 1/);
   assert.throws(() => run(`validatePersonalNotes({notes:{'BAD:1:1':{body:'Invalid'}}})`));
   assert.throws(() => run(`validatePersonalNotes({notes:{}})`));
+});
+
+
+test('app updates bypass stale HTTP assets when filling the offline cache', async () => {
+  const handlers = {};
+  let job, assets;
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'sw.js'), 'utf8'), {
+    Request: class { constructor(url, options) { this.url = url; this.cache = options.cache; } },
+    self: {addEventListener(name, fn) {handlers[name] = fn;}, skipWaiting() {}},
+    caches: {open: async () => ({addAll: async requests => {assets = requests;}})},
+  });
+  handlers.install({waitUntil(p) {job = p;}});
+  await job;
+  assert.ok(assets.every(request => request.cache === 'reload'));
+  assert.ok(assets.some(request => request.url === './personal-notes.js'));
+  assert.ok(assets.some(request => request.url === './bible-data.js'));
 });
