@@ -500,7 +500,9 @@ function renderChapter(scroll = 0) {
   $("next").disabled = !adjacent(1);
   const p = window.STUDY?.preambles?.[state.book];
   const intro =
-    p && state.showPreamble
+    personalIntroductions[state.book] && state.showPreamble
+      ? `<div class="introduction"><button class="text-button" data-context-intro="${state.book}">Read the OSB introduction to ${esc(displayName(state.book))} ›</button></div>`
+      : p && state.showPreamble
       ? `<details class="introduction"><summary>About ${esc(displayName(state.book))}</summary><p>${esc(p.body)}</p><p><strong>Author.</strong> ${esc(p.author)}<br><strong>Setting.</strong> ${esc(p.date)}<br><strong>Theme.</strong> ${esc(p.theme)}</p><p>${esc(p.outline)}</p></details>`
       : "";
   pane.innerHTML = `<div class="content"><p class="eyebrow">${esc(displayName(state.book))}</p><div class="chapter-heading"><h1>${state.book === "PS2" ? "Psalm 151" : "Chapter " + state.chapter}</h1><span>Tap a verse number to save</span></div><p class="translation-label">${isSeptuagint(state.book) ? "Septuagint · LXX2012" : "World English Bible · New Testament"}</p>${intro}<article class="verses">${rangeHtml(state.book, state.chapter)}</article><div class="chapter-end"><button class="secondary" data-direction="-1" ${!adjacent(-1) ? "disabled" : ""}>Previous</button><button class="secondary" data-direction="1" ${!adjacent(1) ? "disabled" : ""}>Next chapter</button></div>${notesHtml()}</div>`;
@@ -639,13 +641,19 @@ function neighboringBook(book, direction) {
   const index = order.indexOf(book);
   return index < 0 ? null : order[index + direction] || null;
 }
+function chapterListHtml(book) {
+  return `<div class="chapter-list">${Array.from({ length: bookMeta(book).n }, (_, i) => {
+    const current = state.book === book && state.chapter === i + 1;
+    return `<button data-chapter="${i + 1}" data-chapter-book="${book}" ${current ? 'aria-current="true"' : ""}><span>Chapter ${i + 1}</span>${current ? '<small>Reading</small>' : icon("right")}</button>`;
+  }).join("")}</div>`;
+}
 function showChapterDrawer() {
   const book = state.book;
   const previous = neighboringBook(book, -1),
     next = neighboringBook(book, 1);
   openDialog(
     displayName(book),
-    `<p class="helper drawer-position">Chapter ${state.chapter} of ${bookMeta(book).n}</p><div class="drawer-books"><button class="secondary" id="drawerPreviousBook" ${previous ? "" : "disabled"}><span>‹ Previous book</span><small>${previous ? esc(displayName(previous)) : "First book"}</small></button><button class="secondary" id="drawerNextBook" ${next ? "" : "disabled"}><span>Next book ›</span><small>${next ? esc(displayName(next)) : "Last book"}</small></button></div><h3 class="section-label">Chapters</h3><div class="chapter-grid">${Array.from({ length: bookMeta(book).n }, (_, i) => `<button class="book-button" data-chapter="${i + 1}" data-chapter-book="${book}" aria-label="Chapter ${i + 1}" ${state.chapter === i + 1 ? 'aria-current="true"' : ""}>${i + 1}</button>`).join("")}</div><button class="text-button" id="drawerAllBooks">Browse all books ›</button>`,
+    `<p class="helper drawer-position">Chapter ${state.chapter} of ${bookMeta(book).n}</p><div class="drawer-books"><button class="secondary" id="drawerPreviousBook" ${previous ? "" : "disabled"}><span>‹ Previous book</span><small>${previous ? esc(displayName(previous)) : "First book"}</small></button><button class="secondary" id="drawerNextBook" ${next ? "" : "disabled"}><span>Next book ›</span><small>${next ? esc(displayName(next)) : "Last book"}</small></button></div><h3 class="section-label">Chapters</h3>${chapterListHtml(book)}<button class="text-button" id="drawerAllBooks">Browse all books ›</button>`,
   );
   dialog.classList.add("chapter-drawer");
   const changeBook = (id, focusId) => {
@@ -689,7 +697,7 @@ function showChapters(book) {
   const parentView = captureSwipeView(dialog);
   openDialog(
     displayName(book),
-    `<button class="text-button" id="backBooks">‹ All books</button><p class="helper">Choose a chapter</p><div class="chapter-grid">${Array.from({ length: bookMeta(book).n }, (_, i) => `<button class="book-button" data-chapter="${i + 1}" data-chapter-book="${book}" ${state.book === book && state.chapter === i + 1 ? 'aria-current="true"' : ""}>${i + 1}</button>`).join("")}</div>`,
+    `<button class="text-button" id="backBooks">‹ All books</button><p class="helper">Choose a chapter</p>${chapterListHtml(book)}`,
   );
   dialogBack = showBooks;
   dialogBackSnapshot = parentView;
@@ -907,7 +915,7 @@ function showSettings() {
       )
       .join(
         "",
-      )}<h3 class="section-label">Personal study notes</h3><p class="helper" id="personalNotesStatus">${personalNotesCount ? `${personalNotesCount.toLocaleString()} imported notes stored on this device.` : "Import your study notes for offline reading. Original OT references are available below chapters; NT notes link from verses."}</p><label class="text-button" for="personalNotesFile">Import study notes</label><input id="personalNotesFile" type="file" accept=".json,application/json"><p class="helper">Choose your orthobible-study-notes.json file. It stays on this device.</p><h3 class="section-label">Reading guides</h3><button class="text-button" data-essay="how-to-read">How to read the Bible ›</button><br><button class="text-button" data-essay="typology">How Scripture speaks of Christ ›</button><p class="helper">Old Testament: LXX2012, Brenton’s Greek Septuagint translation with language updates. New Testament: World English Bible. Psalm numbers follow the Septuagint; source verse ranges and gaps are preserved. Imported OSB notes retain their original references, which have not all been aligned to LXX2012. Both Bible translations are public domain. <a href="https://ebible.org/eng-lxx2012/" target="_blank" rel="noopener">LXX2012 source</a> · <a href="https://ebible.org/engwebu/" target="_blank" rel="noopener">WEB source</a>. Bookmarks, highlights, and comments are saved in this browser.</p>`,
+      )}<h3 class="section-label">Personal study notes</h3><p class="helper" id="personalNotesStatus">${personalContextStatus()}</p><label class="text-button" for="personalNotesFile">Import study notes</label><input id="personalNotesFile" type="file" accept=".json,application/json"><p class="helper">Choose your orthobible study JSON file. It stays on this device.</p><h3 class="section-label">Reading guides</h3><button class="text-button" data-context-library="true">OSB guides &amp; book introductions ›</button><br><button class="text-button" data-essay="how-to-read">How to read the Bible ›</button><br><button class="text-button" data-essay="typology">How Scripture speaks of Christ ›</button><p class="helper">Old Testament: LXX2012, Brenton’s Greek Septuagint translation with language updates. New Testament: World English Bible. Psalm numbers follow the Septuagint; source verse ranges and gaps are preserved. Imported OSB notes retain their original references, which have not all been aligned to LXX2012. Both Bible translations are public domain. <a href="https://ebible.org/eng-lxx2012/" target="_blank" rel="noopener">LXX2012 source</a> · <a href="https://ebible.org/engwebu/" target="_blank" rel="noopener">WEB source</a>. Bookmarks, highlights, and comments are saved in this browser.</p>`,
   );
   $("personalNotesFile").onchange = importPersonalNotes;
   const font = (delta) => {
@@ -959,6 +967,9 @@ function showEssay(id) {
 function handleAction(event) {
   const button = event.target.closest("button");
   if (!button) return;
+  if (button.dataset.contextLibrary) { showContextLibrary(); return; }
+  if (button.dataset.contextGuide !== undefined) { showStudyContext("guide", button.dataset.contextGuide, button.dataset.contextParent); return; }
+  if (button.dataset.contextIntro) { showStudyContext("intro", button.dataset.contextIntro, button.dataset.contextParent); return; }
   if (button.dataset.legacyKey) { showLegacySaved(button.dataset.legacyKey); return; }
   if (button.dataset.studyBook) { showOriginalStudyNotes(button.dataset.studyBook); return; }
   if (button.dataset.prayer) {

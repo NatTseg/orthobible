@@ -4,11 +4,12 @@ Live: https://nattseg.github.io/orthobible/
 
 A simple, offline Scripture reader. LXX2012 Septuagint Old Testament with the World English Bible New Testament, original study notes, bookmarks, highlights, comments, and passages for everyday life.
 
-- **Read:** choose any book and chapter; tap a verse number to save or annotate it.
+- **Read:** choose any book and chapter from a vertical chapter list; tap a verse number to save or annotate it.
 - **Search:** enter a reference such as John 3:16 or a phrase such as “love one another.”
 - **Wisdom:** browse passages by topic.
 - **Prayers:** a simple prayer book with eight prayers and Psalm text, available offline.
 - **Personal study notes:** import your `orthobible-study-notes.json` in Reading settings to store your notes and introductions on this device for offline use. New Testament notes link from verses. Original Old Testament notes remain accessible below chapters in a reference browser; their alignment with LXX2012 is explicitly unverified.
+- **OSB reading context:** the updated personal import adds the complete introductions to all 76 OSB books and ten guides, including How to Read the Bible, the book overview, glossary, and lectionary. Open a book’s introduction above its verses, or browse Reading settings → OSB guides & book introductions. The five separately displayed additions use their parent book’s introduction; 4 Maccabees has no OSB introduction. The guides retain the source edition’s references and ebook navigation instructions.
 - **Saved:** filter your bookmarks, highlights, and comments.
 - **Go back:** drag right from a prayer, Wisdom topic, reading guide, book picker, or linked passage. The current view slides with your finger and reveals its parent. Release beyond roughly one third of the view to go back; a short drag, reversal, or touch cancellation restores the current view.
 - **Reading settings:** change text size, light/dark appearance, introductions, and notes.
@@ -33,3 +34,5 @@ See `GITHUB.md` for GitHub Pages and offline installation. Run regression checks
 - Imported OSB notes are not assumed to share LXX2012 verse numbering. All original note keys and text remain available through the notes browser below OT chapters. They are not pinned to unverified LXX verses.
 
 Rebuild with `python3 scripts/build_septuagint.py /path/to/eng-lxx2012_vpl.zip`. The source URL, SHA-256, and counts are recorded in `data/lxx2012-source.json`. The script takes the unchanged WEB NT and migration archive from commit `b42fa0d`.
+
+To rebuild a private context import from the owner’s extracted MOBI HTML, run `python3 scripts/build_personal_context.py /path/to/book.html /path/to/orthobible-study-notes.json /path/outside/repo/orthobible-osb-context.json` (requires BeautifulSoup). The resulting JSON includes the existing notes unchanged and stays outside the published repository. Import it on each reading device; IndexedDB persists it independently of app cache updates. Older notes-only imports remain supported.

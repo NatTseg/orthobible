@@ -1,6 +1,7 @@
 // Personal notes stay in this browser's IndexedDB, separate from app cache updates.
 let personalNotesCount = 0;
 let personalNotesRevision = 0;
+let personalGuides = [], personalIntroductions = {};
 function validatePersonalNotes(data) {
   if (!data || typeof data.notes !== "object" || !data.notes || Array.isArray(data.notes))
     throw new Error("Choose a valid orthobible study-notes JSON file.");
@@ -24,7 +25,12 @@ function validatePersonalNotes(data) {
       ["author", "date", "theme", "body", "outline"].map((name) => [name, typeof intro[name] === "string" ? intro[name] : ""]),
     );
   }
-  return { notes, preambles };
+  const guides = Array.isArray(data.guides) ? data.guides.map(validateStudyArticle) : [];
+  const introductions = {};
+  for (const [id, article] of Object.entries(data.introductions || {})) {
+    if (window.BIBLE.books.some(b => b.id === id)) introductions[id] = validateStudyArticle(article);
+  }
+  return { notes, preambles, guides, introductions };
 }
 function personalNotesStore(mode, value) {
   return new Promise((resolve, reject) => {
@@ -45,6 +51,8 @@ function applyPersonalNotes(data) {
   window.STUDY.notes = data.notes;
   window.STUDY.preambles = { ...window.STUDY.preambles, ...data.preambles };
   personalNotesCount = Object.keys(data.notes).length;
+  personalGuides = data.guides || [];
+  personalIntroductions = data.introductions || {};
   const top = pane.scrollTop;
   if (state.tab === "bible") renderChapter(state.scroll);
   else if (state.tab === "wisdom") renderWisdom();
@@ -70,7 +78,7 @@ async function importPersonalNotes(event) {
     personalNotesRevision++;
     applyPersonalNotes(data);
     const status = document.getElementById("personalNotesStatus");
-    if (status) status.textContent = `${personalNotesCount.toLocaleString()} imported notes stored on this device.`;
+    if (status) showSettings();
     navigator.storage?.persist?.().catch(() => {});
     notify("Study notes saved for offline reading.");
   } catch (error) {
@@ -79,4 +87,46 @@ async function importPersonalNotes(event) {
     input.disabled = false;
     input.value = "";
   }
+}
+
+// Import structured text only: source markup never becomes executable HTML.
+function validateStudyArticle(article) {
+  if (!article || typeof article.title !== "string" || !Array.isArray(article.blocks) || !article.blocks.length)
+    throw new Error("The study file contains an invalid introduction or guide.");
+  const blocks = article.blocks.map(block => {
+    if (block.type === "table" && Array.isArray(block.rows) && block.rows.every(row => Array.isArray(row) && row.every(cell => typeof cell === "string")))
+      return { type: "table", rows: block.rows };
+    if (!["heading", "paragraph"].includes(block.type) || typeof block.text !== "string")
+      throw new Error("The study file contains an invalid text section.");
+    return { type: block.type, text: block.text };
+  });
+  return { title: article.title, blocks };
+}
+function studyArticleHtml(article) {
+  return article.blocks.map(block => block.type === "table"
+    ? `<div class="context-table"><table>${block.rows.map(row => `<tr>${row.map(cell => `<td>${esc(cell)}</td>`).join("")}</tr>`).join("")}</table></div>`
+    : block.type === "heading" ? `<h3>${esc(block.text)}</h3>` : `<p>${esc(block.text)}</p>`).join("");
+}
+function personalContextStatus() {
+  return personalNotesCount ? `${personalNotesCount.toLocaleString()} notes, ${Object.keys(personalIntroductions).length} book introductions, and ${personalGuides.length} guides stored on this device.`
+    : "Import your OSB study file for offline notes, book introductions, and reading guides.";
+}
+function showContextLibrary(settingsSnapshot) {
+  const parentView = settingsSnapshot || captureSwipeView(dialog);
+  openDialog("OSB reading context", `<button class="text-button" id="contextBack">‹ Reading settings</button><p class="helper">From your personal Orthodox Study Bible copy. References follow the OSB edition.</p><h3 class="section-label">Reading guides</h3><div class="context-list">${personalGuides.map((g, i) => `<button class="topic" data-context-guide="${i}" data-context-parent="library"><span>${esc(g.title)}</span>${icon("right")}</button>`).join("") || '<p class="helper">Import the updated study file to add the OSB guides.</p>'}</div><h3 class="section-label">Book introductions</h3><div class="context-list">${window.BIBLE.books.filter(b => personalIntroductions[b.id]).map(b => `<button class="topic" data-context-intro="${b.id}" data-context-parent="library"><span>${esc(displayName(b.id))}</span>${icon("right")}</button>`).join("")}</div>`);
+  dialogBack = showSettings;
+  dialogBackSnapshot = parentView;
+  $("contextBack").onclick = showSettings;
+}
+function showStudyContext(kind, id, parent) {
+  const article = kind === "guide" ? personalGuides[Number(id)] : personalIntroductions[id];
+  if (!article) return;
+  const parentView = dialog.open ? captureSwipeView(dialog) : null;
+  const top = dialog.scrollTop;
+  const settingsSnapshot = dialogBackSnapshot;
+  const back = parent === "library" ? () => { showContextLibrary(settingsSnapshot); dialog.scrollTop = top; } : closeDialog;
+  openDialog(article.title, `<article class="essay osb-context"><button class="text-button" id="contextBack">‹ ${parent === "library" ? "OSB reading context" : "Back to reading"}</button><p class="eyebrow">Orthodox Study Bible · personal copy</p>${studyArticleHtml(article)}</article>`);
+  dialogBack = parent === "library" ? back : null;
+  dialogBackSnapshot = parentView;
+  $("contextBack").onclick = back;
 }

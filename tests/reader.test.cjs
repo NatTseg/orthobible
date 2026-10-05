@@ -136,7 +136,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v13",
         "orthodox-bible-v18",
         "orthodox-bible-v20",
-        "orthodox-bible-v24",
+        "orthodox-bible-v25",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -420,4 +420,30 @@ test('short drags, reversing, touch cancellation, and multiple fingers never nav
     assert.equal(run('window.lastCommit'), false);
     assert.notEqual(run('selectedPrayer'), null);
   }
+});
+
+test('personal context imports full articles safely and preserves v1 compatibility', () => {
+  const run = reader();
+  run(`window.oldImport = validatePersonalNotes({notes:{'JHN:1:1':{body:'Keep this note'}},preambles:{JHN:{body:'Old introduction'}}});`);
+  assert.equal(run('oldImport.guides.length'), 0);
+  assert.equal(run('oldImport.preambles.JHN.body'), 'Old introduction');
+  run(`window.contextImport = validatePersonalNotes({...oldImport, guides:[{title:'Guide',blocks:[{type:'heading',text:'<img src=x onerror=alert(1)>'},{type:'paragraph',text:'Full text'},{type:'table',rows:[['<script>','Value']]}]}],introductions:{JHN:{title:'John',blocks:[{type:'paragraph',text:'Book context'}]}}}); applyPersonalNotes(contextImport);`);
+  assert.equal(run('personalIntroductions.JHN.blocks[0].text'), 'Book context');
+  assert.equal(run('personalGuides.length'), 1);
+  assert.equal(run('STUDY.notes["JHN:1:1"].body'), 'Keep this note');
+  const html = run('studyArticleHtml(personalGuides[0])');
+  assert.ok(html.includes('&lt;img'));
+  assert.ok(html.includes('<table>'));
+  assert.ok(!html.includes('<script>'));
+  assert.throws(() => run(`validatePersonalNotes({...oldImport,guides:[{title:'Invalid',blocks:[{type:'html',text:'<script>'}]}]})`));
+});
+
+test('chapter lists cover every chapter and mark only the current book and chapter', () => {
+  const run = reader();
+  run(`state.book='PSA'; state.chapter=100;`);
+  const html = run('chapterListHtml("PSA")');
+  assert.equal((html.match(/data-chapter=/g) || []).length, 150);
+  assert.equal((html.match(/aria-current/g) || []).length, 1);
+  assert.ok(html.includes('Chapter 100</span><small>Reading'));
+  assert.ok(!run('chapterListHtml("JHN")').includes('aria-current'));
 });

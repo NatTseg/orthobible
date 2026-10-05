@@ -1,4 +1,4 @@
-const CACHE = "orthodox-bible-v24";
+const CACHE = "orthodox-bible-v25";
 const ASSETS = [
   "./",
   "./index.html",
