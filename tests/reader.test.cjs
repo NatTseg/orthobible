@@ -145,6 +145,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v20",
         "orthodox-bible-v28",
         "orthodox-bible-v29",
+        "orthodox-bible-v30",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -159,7 +160,7 @@ test("activation deletes only old orthobible caches", async () => {
     },
   });
   await job;
-  assert.deepEqual(deleted, ["orthodox-bible-v13", "orthodox-bible-v18", "orthodox-bible-v20", "orthodox-bible-v28"]);
+  assert.deepEqual(deleted, ["orthodox-bible-v13", "orthodox-bible-v18", "orthodox-bible-v20", "orthodox-bible-v28", "orthodox-bible-v29"]);
 });
 
 test("offline HTML fallback is reserved for navigation within this app", async () => {
