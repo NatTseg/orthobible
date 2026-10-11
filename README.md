@@ -15,7 +15,7 @@ A simple, offline Scripture reader. LXX2012 Septuagint Old Testament with the Wo
 - **Reading settings:** change text size, light/dark appearance, introductions, and notes.
 - **Device persistence:** reading position, saves, history, plan progress, and preferences are mirrored into IndexedDB. Startup recovers the newer copy from localStorage or IndexedDB. Imported OSB material stays in IndexedDB across app-cache updates.
 - **Storage & backup:** check offline readiness, request browser storage protection, repair missing offline files, and export a complete JSON backup to Files or iCloud Drive. Restore previews the contents and keeps an undo copy; reader state and personal imports commit together.
-- **Reading tools:** recent passages, three reading plans with saved completion, focus mode, font selection, line spacing, and page tone. Search can be restricted to a testament, book, study notes, or guides. Notes and related passages open in previews.
+- **Reading tools:** recent passages, three reading plans with saved completion, focus mode, font selection, line spacing, and page tone. Search can be restricted to a testament, book, study notes, or guides. Notes and related passages open in previews. Returning from a note or guide restores its search or source-note list, including filters and scroll position. Reading-plan changes retain Reading settings as their back destination.
 
 Footer buttons always open their section’s main view. Preferences, saved verses, and imported study notes remain in this browser. Existing `obible3` data is preserved across the redesign. Calendar and Hours sections have been removed.
 

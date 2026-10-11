@@ -137,12 +137,10 @@ function showContextLibrary(settingsSnapshot) {
 function showStudyContext(kind, id, parent) {
   const article = kind === "guide" ? personalGuides[Number(id)] : personalIntroductions[id];
   if (!article) return;
-  const parentView = dialog.open ? captureSwipeView(dialog) : null;
-  const top = dialog.scrollTop;
-  const settingsSnapshot = dialogBackSnapshot;
-  const back = parent === "library" ? () => { showContextLibrary(settingsSnapshot); dialog.scrollTop = top; } : closeDialog;
-  openDialog(article.title, `<article class="essay osb-context"><button class="text-button" id="contextBack">‹ ${parent === "library" ? "OSB reading context" : "Back to reading"}</button><p class="eyebrow">Orthodox Study Bible · personal copy</p>${studyArticleHtml(article)}</article>`);
-  dialogBack = parent === "library" ? back : null;
-  dialogBackSnapshot = parentView;
+  const origin = captureDialogReturn();
+  const back = origin?.show || closeDialog;
+  openDialog(article.title, `<article class="essay osb-context"><button class="text-button" id="contextBack">‹ ${esc(origin?.title || "Back to reading")}</button><p class="eyebrow">Orthodox Study Bible · personal copy</p>${studyArticleHtml(article)}</article>`);
+  dialogBack = origin ? back : null;
+  dialogBackSnapshot = origin?.snapshot || null;
   $("contextBack").onclick = back;
 }

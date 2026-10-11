@@ -610,18 +610,40 @@ function closeDialog() {
   searchGeneration++;
   if (dialog.open) dialog.close();
 }
-let dialogBack = null, dialogBackSnapshot = null;
+let dialogBack = null, dialogBackSnapshot = null, dialogRefresh = null;
 let wisdomBackSnapshot = null, prayerBackSnapshot = null;
 function openDialog(title, html, back = null) {
   cancelBackSlide();
   dialogBackSnapshot = null;
   dialogBack = back;
+  dialogRefresh = null;
   dialog.classList.remove("chapter-drawer", "note-sheet");
   searchGeneration++;
   $("dialogTitle").textContent = title;
   $("dialogBody").innerHTML = html;
   if (!dialog.open) dialog.showModal();
   dialog.scrollTop = 0;
+}
+function captureDialogReturn() {
+  if (!dialog.open) return null;
+  const title = $("dialogTitle").textContent;
+  const nodes = [...$("dialogBody").childNodes];
+  const classes = [...dialog.classList].filter(name => !name.startsWith("swipe-"));
+  const top = dialog.scrollTop;
+  const back = dialogBack, backSnapshot = dialogBackSnapshot;
+  const refresh = dialogRefresh, focus = document.activeElement;
+  const snapshot = captureSwipeView(dialog);
+  return {title, snapshot, show() {
+    if (refresh) refresh();
+    else {
+      openDialog(title, "");
+      $("dialogBody").replaceChildren(...nodes);
+      dialog.classList.add(...classes);
+    }
+    dialogBack = back; dialogBackSnapshot = backSnapshot;
+    if (focus?.isConnected) focus.focus({preventScroll:true});
+    dialog.scrollTop = top;
+  }};
 }
 function showBooks() {
   openDialog(
@@ -924,13 +946,13 @@ function jumpNote(book, ch, v) {
 function showSettings() {
   openDialog(
     "Reading settings",
-    `<div class="setting"><span>Text size</span><div class="stepper"><button class="secondary" id="fontDown" aria-label="Decrease text size">A−</button><span id="fontValue">${state.font}</span><button class="secondary" id="fontUp" aria-label="Increase text size">A+</button></div></div><div class="setting"><span>Appearance</span><button class="secondary" id="themeToggle">${state.theme === "dark" ? "Dark" : "Light"}</button></div>${[
+    `<div class="setting"><span>Text size</span><div class="stepper"><button class="secondary" id="fontDown" aria-label="Decrease text size">A−</button><span id="fontValue">${state.font}</span><button class="secondary" id="fontUp" aria-label="Increase text size">A+</button></div></div><div class="setting"><span>Appearance</span><button class="secondary" id="themeToggle" aria-label="Dark mode" aria-pressed="${state.theme === "dark"}">${state.theme === "dark" ? "Dark" : "Light"}</button></div>${[
       ["showPreamble", "Book introductions"],
       ["showNotes", "Study notes"],
     ]
       .map(
         ([id, label]) =>
-          `<div class="setting"><span>${label}</span><button class="secondary" data-setting="${id}" aria-pressed="${!!state[id]}">${state[id] ? "On" : "Off"}</button></div>`,
+          `<div class="setting"><span>${label}</span><button class="secondary" data-setting="${id}" aria-label="${label}" aria-pressed="${!!state[id]}">${state[id] ? "On" : "Off"}</button></div>`,
       )
       .join(
         "",
@@ -955,6 +977,7 @@ function showSettings() {
     applyAppearance();
     persist();
     $("themeToggle").textContent = state.theme === "dark" ? "Dark" : "Light";
+    $("themeToggle").setAttribute("aria-pressed", state.theme === "dark");
   };
   $("dialogBody")
     .querySelectorAll("[data-setting]")
@@ -978,14 +1001,15 @@ function showSettings() {
 function showEssay(id) {
   const e = window.STUDY?.essays?.[id];
   if (!e) return;
-  const parentView = captureSwipeView(dialog);
+  const parent = captureDialogReturn();
+  const back = parent?.show || closeDialog;
   openDialog(
     e.title,
-    `<div class="essay"><button class="text-button" id="backSettings">‹ Reading settings</button><p>${esc(e.lead)}</p>${e.sections.map((s) => `<h3>${esc(s.h)}</h3><p>${esc(s.p)}</p>`).join("")}</div>`,
+    `<div class="essay"><button class="text-button" id="backSettings">‹ ${esc(parent?.title || "Back to reading")}</button><p>${esc(e.lead)}</p>${e.sections.map((s) => `<h3>${esc(s.h)}</h3><p>${esc(s.p)}</p>`).join("")}</div>`,
   );
-  dialogBack = showSettings;
-  dialogBackSnapshot = parentView;
-  $("backSettings").onclick = showSettings;
+  dialogBack = parent ? back : null;
+  dialogBackSnapshot = parent?.snapshot || null;
+  $("backSettings").onclick = back;
 }
 function handleAction(event) {
   const button = event.target.closest("button");

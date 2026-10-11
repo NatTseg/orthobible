@@ -37,14 +37,16 @@ function showSourceNotes(book,chapter) {
   chapter=chapters.includes(chapter)?chapter:chapters[0];
   openDialog(`OSB notes · ${displayName(book)}`,`<p class="helper">These are the OSB’s original reference numbers. Unlinked notes remain here until their verse link is reviewed.</p><label for="sourceNoteChapter">OSB chapter</label><select id="sourceNoteChapter">${chapters.map(ch=>`<option ${ch===chapter?'selected':''}>${ch}</option>`).join('')}</select>${keys.filter(k=>parseKey(k).ch===chapter).map(key=>`<button class="result" data-note-key="${key}" data-source-note="true"><strong>${esc(key)} · ${personalAlignment?.notes?.[key]?'Linked':'Needs review'}</strong><p>${esc(personalSourceNotes[key].body.slice(0,180))}…</p></button>`).join('')}`);
   $('sourceNoteChapter').onchange=event=>showSourceNotes(book,+event.target.value);
+  dialogRefresh=()=>showSourceNotes(book,chapter);
 }
 function showNoteLinkReview(key) {
   const note=personalSourceNotes[key];if(!note)return;
   const parent=captureSwipeView(dialog);
+  const noteParent=studyNoteParent;
   const suggestion=personalAlignment?.notes?.[key]||personalAlignment?.candidates?.[key]?.target;
   const initial=suggestion?parseKey(suggestion):{book:state.book,ch:state.chapter,v:1};
   openDialog('Review this verse link',`<button class="text-button" id="reviewBack">‹ Study note</button><p class="helper">Compare the original OSB verse with the passage in this app. Confirm only if they refer to the same verse.</p><h3 class="section-label">OSB ${esc(key)}</h3><blockquote>${esc(note.sourceVerse||'No source verse text was included in this import.')}</blockquote><form id="noteLinkForm"><label for="noteLinkRef">Passage in this app</label><input id="noteLinkRef" value="${esc(refLabel(initial.book,initial.ch,initial.v))}" autocomplete="off"><blockquote id="noteLinkText"></blockquote><button class="primary" id="confirmNoteLink" type="submit">Confirm this verse link</button><button class="text-button" id="removeNoteLink" type="button">Leave this note unlinked</button></form>`);
-  dialogBack=()=>showStudyNote(key,true);dialogBackSnapshot=parent;$('reviewBack').onclick=dialogBack;
+  dialogBack=()=>showStudyNote(key,true,noteParent);dialogBackSnapshot=parent;$('reviewBack').onclick=dialogBack;
   const read=()=>{const p=parseRef($('noteLinkRef').value);return p?.v?p:null};
   const preview=()=>{const p=read();$('noteLinkText').textContent=p?verseText(p.book,p.ch,p.v):'Enter a valid book, chapter, and verse.';$('confirmNoteLink').disabled=!p};
   $('noteLinkRef').oninput=preview;preview();
@@ -55,7 +57,7 @@ function showNoteLinkReview(key) {
       data.alignment=data.alignment||{edition:window.BIBLE.edition,version:1,notes:{},verses:{},evidence:{},candidates:{}};
       if(target){data.alignment.notes[key]=target;data.alignment.verses[key]=target;data.alignment.evidence[key]={method:'user-reviewed',score:1}}
       else {delete data.alignment.notes[key];delete data.alignment.verses[key];delete data.alignment.evidence[key]}
-      await personalNotesStore('readwrite',validatePersonalNotes(data));personalNotesRevision++;applyPersonalNotes(data);queueCloudSync();showStudyNote(key,true);notify(target?'Verse link saved.':'Note left unlinked.');
+      await personalNotesStore('readwrite',validatePersonalNotes(data));personalNotesRevision++;applyPersonalNotes(data);queueCloudSync();showStudyNote(key,true,noteParent);notify(target?'Verse link saved.':'Note left unlinked.');
     }catch(error){notify(error.message)}
   };
   $('noteLinkForm').onsubmit=event=>{event.preventDefault();const p=read();if(p)save(keyOf(p.book,p.ch,sourceVerseStart(p.book,p.ch,p.v)))};

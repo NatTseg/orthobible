@@ -1,5 +1,6 @@
 const READER_TOOL_DEFAULTS = {fontFamily:'serif', lineSpacing:1.85, paper:'original', history:[], readingPlan:null};
 let focusReading = false;
+let studyNoteParent = null;
 function normalizeReaderTools(reader) {
   reader.fontFamily=['serif','sans','book'].includes(reader.fontFamily)?reader.fontFamily:'serif';
   reader.lineSpacing=Number.isFinite(reader.lineSpacing)?Math.max(1.4,Math.min(2.4,reader.lineSpacing)):1.85;
@@ -60,8 +61,8 @@ function planDays(id) {
   return Array.from({length:days},(_,i)=>chapters.slice(Math.floor(i*chapters.length/days),Math.floor((i+1)*chapters.length/days)));
 }
 function planName(id) {return {'gospels':'The Gospels in 30 days','psalms':'Psalms in 30 days','whole-bible':'The Bible in 365 days'}[id]}
-function showReadingPlan(choose=false,day) {
-  const parent=captureSwipeView(dialog),plan=state.readingPlan;
+function showReadingPlan(choose=false,day,parent=captureSwipeView(dialog)) {
+  const plan=state.readingPlan;
   let html='<button class="text-button" id="toolsBack">‹ Reading settings</button>';
   if(!plan||choose) html+=`<p>Choose a daily reading plan. Progress is saved offline and included in backups.</p>${plan?'<p class="helper">Choosing a plan starts its progress again.</p>':''}${['gospels','psalms','whole-bible'].map(id=>`<button class="result" data-start-plan="${id}"><strong>${planName(id)}</strong></button>`).join('')}`;
   else {
@@ -71,12 +72,14 @@ function showReadingPlan(choose=false,day) {
   }
   openDialog('Reading plan',html);dialogBack=showSettings;dialogBackSnapshot=parent;$('toolsBack').onclick=showSettings;
 }
-function showStudyNote(key,source=false) {
+function showStudyNote(key,source=false,parent=captureDialogReturn()) {
   const note=source?personalSourceNotes[key]:window.STUDY?.notes?.[key];if(!note)return;
+  studyNoteParent=parent;
   const p=parseKey(key),target=source?personalAlignment?.notes?.[key]:verifiedNoteTarget(key);
   const refs=(note.see||[]).map(ref=>{const mapped=verifiedReferenceTarget(ref);return mapped?`<button class="text-button" data-preview-ref="${mapped}" data-preview-note="${esc(key)}" ${source?'data-preview-source="true"':''}>${esc(refLabel(...Object.values(parseKey(mapped))))} ›</button>`:`<span class="helper">OSB reference: ${esc(ref)}</span>`}).join(' ');
-  openDialog(note.title||'Study note',`<article class="footnote"><p class="helper">${personalNotesCount?'Orthodox Study Bible · personal copy':'Study note'} · ${target?'Linked to '+esc(refLabel(...Object.values(parseKey(target))))+' · OSB '+esc(key):'Original reference '+esc(key)}</p><p>${esc(note.body)}</p>${source?`<button class="text-button" data-review-note="${key}">${target?"Review or change verse link":"Review verse link"} ›</button>`:""}${refs?`<h3 class="section-label">Related passages</h3><div class="context-list">${refs}</div>`:''}</article>`);
+  openDialog(note.title||'Study note',`${parent?`<button class="text-button" id="noteBack">‹ ${esc(parent.title)}</button>`:''}<article class="footnote"><p class="helper">${personalNotesCount?'Orthodox Study Bible · personal copy':'Study note'} · ${target?'Linked to '+esc(refLabel(...Object.values(parseKey(target))))+' · OSB '+esc(key):'Original reference '+esc(key)}</p><p>${esc(note.body)}</p>${source?`<button class="text-button" data-review-note="${key}">${target?"Review or change verse link":"Review verse link"} ›</button>`:""}${refs?`<h3 class="section-label">Related passages</h3><div class="context-list">${refs}</div>`:''}</article>`);
   dialog.classList.add('note-sheet');
+  if(parent){dialogBack=parent.show;dialogBackSnapshot=parent.snapshot;$('noteBack').onclick=parent.show;}
 }
 function verifiedNoteTarget(key) {
   const p=parseKey(key);
@@ -91,9 +94,10 @@ function verifiedReferenceTarget(key) {
 function showPassagePreview(key,parentNote,source=false,parentVerse) {
   const p=parseKey(key);if(!validVerse(p.book,p.ch,p.v))return;
   const parent=dialog.open?captureSwipeView(dialog):null;
+  const noteParent=studyNoteParent;
   openDialog(refLabel(p.book,p.ch,p.v),`${parentNote||parentVerse?`<button class="text-button" id="previewBack">‹ ${parentNote?"Study note":"Verse"}</button>`:""}<blockquote>${esc(verseText(p.book,p.ch,p.v))}</blockquote><button class="text-button" data-action="jump" data-key="${key}">Read chapter ›</button>`);
   dialog.classList.add('note-sheet');
-  if(parentNote||parentVerse){dialogBack=parentNote?()=>showStudyNote(parentNote,source):()=>{const p=parseKey(parentVerse);showVerse(p.book,p.ch,p.v)};dialogBackSnapshot=parent;$('previewBack').onclick=dialogBack;}
+  if(parentNote||parentVerse){dialogBack=parentNote?()=>showStudyNote(parentNote,source,noteParent):()=>{const p=parseKey(parentVerse);showVerse(p.book,p.ch,p.v)};dialogBackSnapshot=parent;$('previewBack').onclick=dialogBack;}
 }
 function relatedPassagesHtml(book,ch,v) {
   const refs=new Set();
@@ -120,10 +124,10 @@ function searchStudyContent(query,area) {
 function handleReaderToolAction(button) {
   const d=button.dataset;
   if(d.historyIndex!==undefined){const item={...state.history[+d.historyIndex]};goChapter(item.book,item.chapter);state.scroll=item.scroll;renderChapter(item.scroll);persist();}
-  else if(d.startPlan){state.readingPlan={id:d.startPlan,completed:[]};persist();showReadingPlan();}
-  else if(d.choosePlan)showReadingPlan(true);
-  else if(d.planDay!==undefined)showReadingPlan(false,+d.planDay);
-  else if(d.completePlan!==undefined){const day=+d.completePlan,c=state.readingPlan.completed;state.readingPlan.completed=c.includes(day)?c.filter(n=>n!==day):[...c,day];persist();showReadingPlan(false,day);}
+  else if(d.startPlan){state.readingPlan={id:d.startPlan,completed:[]};persist();showReadingPlan(false,undefined,dialogBackSnapshot);}
+  else if(d.choosePlan)showReadingPlan(true,undefined,dialogBackSnapshot);
+  else if(d.planDay!==undefined)showReadingPlan(false,+d.planDay,dialogBackSnapshot);
+  else if(d.completePlan!==undefined){const day=+d.completePlan,c=state.readingPlan.completed;state.readingPlan.completed=c.includes(day)?c.filter(n=>n!==day):[...c,day];persist();showReadingPlan(false,day,dialogBackSnapshot);}
   else if(d.noteKey)showStudyNote(d.noteKey,!!d.sourceNote);
   else if(d.sourceBook)showSourceNotes(d.sourceBook);
   else if(d.reviewNote)showNoteLinkReview(d.reviewNote);

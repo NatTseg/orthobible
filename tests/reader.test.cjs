@@ -12,7 +12,9 @@ function reader(stored = {}) {
       return [];
     },
     style: { setProperty() {}, removeProperty() {} },
-    classList: { add() {}, remove() {}, toggle() {} },
+    classList: { add() {}, remove() {}, toggle() {}, *[Symbol.iterator]() {} },
+    childNodes: [],
+    replaceChildren(...nodes) { this.childNodes = nodes; },
     dataset: {},
   });
   const nodes = new Map();
@@ -142,6 +144,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v18",
         "orthodox-bible-v20",
         "orthodox-bible-v28",
+        "orthodox-bible-v29",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -156,7 +159,7 @@ test("activation deletes only old orthobible caches", async () => {
     },
   });
   await job;
-  assert.deepEqual(deleted, ["orthodox-bible-v13", "orthodox-bible-v18", "orthodox-bible-v20"]);
+  assert.deepEqual(deleted, ["orthodox-bible-v13", "orthodox-bible-v18", "orthodox-bible-v20", "orthodox-bible-v28"]);
 });
 
 test("offline HTML fallback is reserved for navigation within this app", async () => {
@@ -562,6 +565,57 @@ test('recent history deduplicates chapters while retaining reading position', ()
   assert.equal(run('state.history.length'),2);
   assert.equal(run('state.history[0].scroll'),.7);
   assert.equal(run('state.history[1].book'),'GEN');
+});
+
+test('reading-plan changes retain the settings destination for sliding back', () => {
+  const run=reader();
+  run(`loadPrefs(); dialog.open=true; window.captures=0; captureSwipeView=()=>({label:'Reading settings',n:++captures}); showReadingPlan();`);
+  for(const dataset of [{startPlan:'gospels'},{planDay:'2'},{completePlan:'2'},{choosePlan:'true'},{startPlan:'psalms'}]) {
+    run(`handleReaderToolAction({dataset:${JSON.stringify(dataset)}})`);
+    assert.equal(run('dialogBackSnapshot.label'),'Reading settings');
+    assert.equal(run('dialogBack === showSettings'),true);
+  }
+  assert.equal(run('captures'),1,'changes within a plan must not replace its parent with a previous day');
+});
+
+test('returning to a dialog retains input values, handlers, focus, and scroll', () => {
+  const run=reader();
+  run(`dialog.open=true; $('dialogTitle').textContent='Search Scripture'; dialog.scrollTop=240;
+    window.changed=0; window.input={value:'love',oninput:()=>changed++,isConnected:true,focus:()=>window.refocused=true};
+    $('dialogBody').childNodes=[input]; document.activeElement=input;
+    window.back=()=>{}; dialogBack=back; window.route=captureDialogReturn();
+    openDialog('Study note','Note'); $('dialogBody').childNodes=[]; route.show();
+    $('dialogBody').childNodes[0].oninput();`);
+  assert.equal(run('$("dialogTitle").textContent'),'Search Scripture');
+  assert.equal(run('$("dialogBody").childNodes[0].value'),'love');
+  assert.equal(run('changed'),1);
+  assert.equal(run('refocused'),true);
+  assert.equal(run('dialog.scrollTop'),240);
+  assert.equal(run('dialogBack === back'),true);
+});
+
+test('passage previews retain the source-note browser as the note parent', () => {
+  const run=reader();
+  run(`loadPrefs(); dialog.open=true;
+    personalSourceNotes={'JHN:1:1':{title:'Source note',body:'Personal test note',sourceVerse:'In the beginning',see:['JHN:1:2']}};
+    window.returns=0;window.origin={title:'OSB notes · John',snapshot:{label:'source-list'},show:()=>returns++};
+    showStudyNote('JHN:1:1',true,origin); showPassagePreview('JHN:1:2','JHN:1:1',true); dialogBack();`);
+  assert.equal(run('dialogBackSnapshot.label'),'source-list');
+  assert.equal(run('studyNoteParent === origin'),true);
+  assert.ok(run('$('+'"dialogBody"'+').innerHTML').includes('OSB notes · John'));
+  run('dialogBack()');
+  assert.equal(run('returns'),1);
+});
+
+test('OSB guides opened from search restore the query and result position', () => {
+  const run=reader();
+  run(`dialog.open=true; $('dialogTitle').textContent='Search Scripture';dialog.scrollTop=170;
+    window.query={value:'Scripture'}; $('dialogBody').childNodes=[query];
+    personalGuides=[{title:'Test guide',blocks:[{type:'paragraph',text:'Guide text'}]}];
+    showStudyContext('guide',0); $('dialogBody').childNodes=[]; dialogBack();`);
+  assert.equal(run('$("dialogTitle").textContent'),'Search Scripture');
+  assert.equal(run('$('+'"dialogBody"'+').childNodes[0].value'),'Scripture');
+  assert.equal(run('dialog.scrollTop'),170);
 });
 
 test('source notes attach only through a valid matching-edition alignment', () => {
