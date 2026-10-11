@@ -880,7 +880,8 @@ textarea {
 }
 @media (max-width: 600px) {
   .header {
-    padding: calc(6px + env(safe-area-inset-top, 0px)) 14px 6px;
+    /* Keep notch clearance without adding an empty strip above the toolbar. */
+    padding: env(safe-area-inset-top, 0px) 14px 0;
   }
   .brand {
     font-size: 18px;
@@ -899,7 +900,7 @@ textarea {
     display: none;
   }
   #pane {
-    padding: 22px 18px 28px;
+    padding: 8px 18px 28px;
   }
   .chapter-heading {
     flex-wrap: wrap;

@@ -136,7 +136,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v13",
         "orthodox-bible-v18",
         "orthodox-bible-v20",
-        "orthodox-bible-v25",
+        "orthodox-bible-v26",
       ],
       delete: async (key) => deleted.push(key),
     },
