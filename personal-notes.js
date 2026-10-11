@@ -1,7 +1,9 @@
 // Personal notes stay in this browser's IndexedDB, separate from app cache updates.
+const builtInStudy = {notes: window.STUDY.notes, preambles: {...window.STUDY.preambles}};
 let personalNotesCount = 0;
 let personalNotesRevision = 0;
 let personalGuides = [], personalIntroductions = {};
+let personalAlignment = null;
 function validatePersonalNotes(data) {
   if (!data || typeof data.notes !== "object" || !data.notes || Array.isArray(data.notes))
     throw new Error("Choose a valid orthobible study-notes JSON file.");
@@ -30,7 +32,14 @@ function validatePersonalNotes(data) {
   for (const [id, article] of Object.entries(data.introductions || {})) {
     if (window.BIBLE.books.some(b => b.id === id)) introductions[id] = validateStudyArticle(article);
   }
-  return { notes, preambles, guides, introductions };
+  const sourceNotes = {};
+  for (const [key,note] of Object.entries(data.sourceNotes || {})) {
+    if (!/^[A-Z0-9]{3}:\d+:\d+$/.test(key) || !note || typeof note.body !== "string") throw new Error("Invalid OSB source note.");
+    sourceNotes[key] = {kind:"OSB source note", title:typeof note.title === "string" ? note.title : key, body:note.body,
+      sourceVerse:typeof note.sourceVerse === "string" ? note.sourceVerse : "", see:Array.isArray(note.see) ? note.see.filter(k => typeof k === "string" && /^[A-Z0-9]{3}:\d+:\d+$/.test(k)) : []};
+  }
+  const alignment = typeof validateNoteAlignment === "function" ? validateNoteAlignment(data.alignment,sourceNotes) : null;
+  return { notes, preambles, guides, introductions, sourceNotes, alignment };
 }
 function personalNotesStore(mode, value) {
   return new Promise((resolve, reject) => {
@@ -48,9 +57,12 @@ function personalNotesStore(mode, value) {
   });
 }
 function applyPersonalNotes(data) {
+  const imported = !!data;
+  data = data || {notes: builtInStudy.notes, preambles: {}};
   window.STUDY.notes = data.notes;
-  window.STUDY.preambles = { ...window.STUDY.preambles, ...data.preambles };
-  personalNotesCount = Object.keys(data.notes).length;
+  window.STUDY.preambles = { ...builtInStudy.preambles, ...data.preambles };
+  personalNotesCount = imported ? Object.keys(data.notes).length : 0;
+  if (typeof applyNoteAlignment === "function") applyNoteAlignment(imported ? data : null);
   personalGuides = data.guides || [];
   personalIntroductions = data.introductions || {};
   const top = pane.scrollTop;
@@ -70,6 +82,7 @@ async function restorePersonalNotes() {
 async function importPersonalNotes(event) {
   const input = event.target, file = input.files?.[0];
   if (!file) return;
+  if (typeof persistenceBusy !== "undefined" && persistenceBusy) { notify("Wait for the restore to finish before importing notes."); return; }
   input.disabled = true;
   try {
     if (file.size > 20 * 1024 * 1024) throw new Error("Choose a study-notes file smaller than 20 MB.");
@@ -81,6 +94,7 @@ async function importPersonalNotes(event) {
     if (status) showSettings();
     navigator.storage?.persist?.().catch(() => {});
     notify("Study notes saved for offline reading.");
+    if (typeof queueCloudSync === "function") queueCloudSync();
   } catch (error) {
     notify(error instanceof SyntaxError ? "Choose a valid study-notes JSON file." : error.message || "Could not save notes. Check available storage and try again.");
   } finally {
@@ -108,7 +122,9 @@ function studyArticleHtml(article) {
     : block.type === "heading" ? `<h3>${esc(block.text)}</h3>` : `<p>${esc(block.text)}</p>`).join("");
 }
 function personalContextStatus() {
-  return personalNotesCount ? `${personalNotesCount.toLocaleString()} notes, ${Object.keys(personalIntroductions).length} book introductions, and ${personalGuides.length} guides stored on this device.`
+  const linked = Object.keys(personalAlignment?.notes || {}).length;
+  const source = Object.keys(personalSourceNotes).length;
+  return personalNotesCount ? `${personalNotesCount.toLocaleString()} earlier notes, ${Object.keys(personalIntroductions).length} book introductions, and ${personalGuides.length} guides stored on this device.${source ? ` ${linked.toLocaleString()} of ${source.toLocaleString()} source notes have verse links; all remain available in the notes browser.` : ''}`
     : "Import your OSB study file for offline notes, book introductions, and reading guides.";
 }
 function showContextLibrary(settingsSnapshot) {

@@ -1,10 +1,15 @@
-const CACHE = "orthodox-bible-v26";
+const CACHE = "orthodox-bible-v27";
 const ASSETS = [
   "./",
   "./index.html",
   "./app.js",
   "./swipe.js",
   "./personal-notes.js",
+  "./persistence.js",
+  "./cloud-config.js",
+  "./cloud-sync.js",
+  "./reader-tools.js",
+  "./note-alignment.js",
   "./prayers-data.js",
   "./styles.css",
   "./bible-data.js",
@@ -63,4 +68,20 @@ self.addEventListener("fetch", (event) => {
       }
     }),
   );
+});
+
+self.addEventListener("message", event => {
+  const type = event.data?.type;
+  if (!["ORTHOBIBLE_STORAGE_STATUS", "ORTHOBIBLE_REPAIR_CACHE"].includes(type) || !event.ports?.[0]) return;
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(CACHE);
+      let missing = (await Promise.all(ASSETS.map(async url => await cache.match(url) ? null : url))).filter(Boolean);
+      if (type === "ORTHOBIBLE_REPAIR_CACHE" && missing.length) {
+        await cache.addAll(missing.map(url => new Request(url, {cache:"reload"})));
+        missing = (await Promise.all(ASSETS.map(async url => await cache.match(url) ? null : url))).filter(Boolean);
+      }
+      event.ports[0].postMessage({version:CACHE, total:ASSETS.length, cached:ASSETS.length - missing.length, missing});
+    } catch { event.ports[0].postMessage({error:"Offline files could not be checked or repaired. Reconnect and try again."}); }
+  })());
 });

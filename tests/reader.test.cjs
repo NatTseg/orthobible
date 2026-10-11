@@ -12,7 +12,7 @@ function reader(stored = {}) {
       return [];
     },
     style: { setProperty() {}, removeProperty() {} },
-    classList: { add() {}, remove() {} },
+    classList: { add() {}, remove() {}, toggle() {} },
     dataset: {},
   });
   const nodes = new Map();
@@ -56,6 +56,10 @@ function reader(stored = {}) {
   ])
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context);
   vm.runInContext(fs.readFileSync(path.join(root, "personal-notes.js"), "utf8"), context);
+  vm.runInContext(fs.readFileSync(path.join(root, "persistence.js"), "utf8"), context);
+  vm.runInContext(fs.readFileSync(path.join(root, "cloud-sync.js"), "utf8"), context);
+  vm.runInContext(fs.readFileSync(path.join(root, "reader-tools.js"), "utf8"), context);
+  vm.runInContext(fs.readFileSync(path.join(root, "note-alignment.js"), "utf8"), context);
   const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
   // Bind functions and event handlers, without rendering the initial browser view.
   vm.runInContext(
@@ -136,7 +140,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v13",
         "orthodox-bible-v18",
         "orthodox-bible-v20",
-        "orthodox-bible-v26",
+        "orthodox-bible-v27",
       ],
       delete: async (key) => deleted.push(key),
     },
@@ -446,4 +450,168 @@ test('chapter lists cover every chapter and mark only the current book and chapt
   assert.equal((html.match(/aria-current/g) || []).length, 1);
   assert.ok(html.includes('Chapter 100</span><small>Reading'));
   assert.ok(!run('chapterListHtml("JHN")').includes('aria-current'));
+});
+
+
+test('full backups preserve imports, legacy saves and preferences without credentials', () => {
+  const run = reader();
+  run(`loadPrefs(); state.bookmarks=[{book:'JHN',chapter:1,verse:1,ts:1}]; state.comments={'JHN:1:1':'Keep <this>'}; state.cloudToken='secret'; window.backup={format:'orthobible-backup',version:1,reader:backupReader(state),personal:{notes:{'JHN:1:1':{body:'Imported'}},guides:[{title:'Guide',blocks:[{type:'paragraph',text:'Complete text'}]}]}}; window.checked=validateBackup(backup);`);
+  assert.equal(run('checked.reader.comments["JHN:1:1"]'), 'Keep <this>');
+  assert.equal(run('checked.personal.guides[0].blocks[0].text'), 'Complete text');
+  assert.equal(run('checked.reader.cloudToken'), undefined);
+  assert.throws(() => run('validateBackup({...backup,version:99})'));
+  assert.throws(() => run('validateBackup({...backup,reader:{...backup.reader,chapter:999}})'));
+  assert.throws(() => run('validateBackup({...backup,reader:{...backup.reader,comments:{"BAD:1:1":"bad"}}})'));
+  assert.throws(() => run('validateBackup({notes:{"JHN:1:1":{body:"wrong file"}}})'));
+});
+
+test('restore commits personal material and reading state together, retains an undo copy, and clears absent imports', async () => {
+  const run = reader();
+  run(`loadPrefs(); state.comments={'JHN:1:1':'Before'}; window.storedRecords={notes:{notes:{'JHN:1:1':{body:'Old import'}},preambles:{}}}; studyRead=async key=>storedRecords[key]; studyTransaction=async values=>Object.assign(storedRecords,values); rememberScroll=()=>{}; renderRestoredReader=(reader,personal)=>{Object.assign(state,reader); window.appliedPersonal=personal;}; window.restore={format:'orthobible-backup',version:1,reader:{...backupReader(state),chapter:3,comments:{'JHN:3:16':'After'}},personal:null};`);
+  await run('restoreBackup(restore)');
+  assert.equal(run('storedRecords.readerState.chapter'), 3);
+  assert.equal(run('storedRecords.notes'), null);
+  assert.equal(run('storedRecords.restoreRecovery.reader.comments["JHN:1:1"]'), 'Before');
+  assert.equal(run('storedRecords.restoreRecovery.personal.notes["JHN:1:1"].body'), 'Old import');
+  assert.equal(run('appliedPersonal'), null);
+  assert.equal(run('persistenceBusy'), false);
+});
+
+test('a failed restore transaction leaves current reader state intact', async () => {
+  const run = reader();
+  run(`loadPrefs(); state.comments={'JHN:1:1':'Keep'}; studyRead=async()=>null; studyTransaction=async()=>{throw new Error('Full disk')}; rememberScroll=()=>{}; window.restore={format:'orthobible-backup',version:1,reader:{...backupReader(state),chapter:3,comments:{}},personal:null};`);
+  await assert.rejects(run('restoreBackup(restore)'), /Full disk/);
+  assert.equal(run('state.comments["JHN:1:1"]'), 'Keep');
+  assert.equal(run('state.chapter'), 1);
+  assert.equal(run('persistenceBusy'), false);
+});
+
+test('startup recovers a newer durable reader copy when the local mirror was not written', async () => {
+  const run = reader({book:'JHN',chapter:1,savedAt:10});
+  run(`studyRead=async()=>({book:'JHN',chapter:3,savedAt:20});`);
+  assert.equal((await run('readStoredReader()')).chapter,3);
+  run(`studyRead=async()=>({book:'JHN',chapter:3,savedAt:5});`);
+  assert.equal((await run('readStoredReader()')).chapter,1);
+  run(`localStorage.getItem=()=> '"corrupt"';`);
+  assert.equal((await run('readStoredReader()')).chapter,3);
+});
+
+test('offline status identifies missing files and repair preserves other cached data', async () => {
+  const handlers = {}, missing = new Set(['./app.js', './reader-tools.js']);
+  const added = [];
+  vm.runInNewContext(fs.readFileSync(path.join(root, 'sw.js'), 'utf8'), {
+    self: {addEventListener: (name, fn) => handlers[name] = fn},
+    Request: class { constructor(url, options) { this.url = url; this.cache = options.cache; } },
+    caches: {open: async () => ({
+      match: async url => !missing.has(url),
+      addAll: async requests => { for (const r of requests) { assert.equal(r.cache, 'reload'); added.push(r.url); missing.delete(r.url); } }
+    })}
+  });
+  async function message(type) {
+    let work, result;
+    handlers.message({data:{type},ports:[{postMessage: value => result=value}],waitUntil:p=>work=p});
+    await work; return result;
+  }
+  const before=await message('ORTHOBIBLE_STORAGE_STATUS');
+  assert.equal(before.total-before.cached, 2);
+  const after=await message('ORTHOBIBLE_REPAIR_CACHE');
+  assert.equal(after.missing.length, 0);
+  assert.deepEqual(added, ['./app.js', './reader-tools.js']);
+});
+
+
+test('cloud merge combines independent changes and preserves deletions', () => {
+  const run=reader();
+  run(`loadPrefs(); window.base={format:'orthobible-backup',version:1,reader:backupReader(state),personal:null}; base.reader.comments={'JHN:1:1':'Original'}; window.local=JSON.parse(JSON.stringify(base)); window.remote=JSON.parse(JSON.stringify(base)); delete local.reader.comments['JHN:1:1']; local.reader.comments['JHN:1:2']='Local'; remote.reader.highlights['JHN:1:3']='gold'; remote.reader.chapter=3; window.merged=mergeCloudBackups(base,local,remote);`);
+  assert.equal(run('merged.conflicts.length'),0);
+  assert.equal(run('merged.backup.reader.comments["JHN:1:1"]'),undefined);
+  assert.equal(run('merged.backup.reader.comments["JHN:1:2"]'),'Local');
+  assert.equal(run('merged.backup.reader.highlights["JHN:1:3"]'),'gold');
+  assert.equal(run('merged.backup.reader.chapter'),3);
+});
+
+test('cloud merge pauses on competing comments rather than losing either version', () => {
+  const run=reader();
+  run(`loadPrefs(); window.base={format:'orthobible-backup',version:1,reader:backupReader(state),personal:null}; window.local=JSON.parse(JSON.stringify(base)); window.remote=JSON.parse(JSON.stringify(base)); local.reader.comments['JHN:1:1']='Phone';remote.reader.comments['JHN:1:1']='Mac';window.merged=mergeCloudBackups(base,local,remote);`);
+  assert.equal(run('merged.conflicts[0]'),'comments: JHN:1:1');
+  assert.equal(run('local.reader.comments["JHN:1:1"]'),'Phone');
+  assert.equal(run('remote.reader.comments["JHN:1:1"]'),'Mac');
+});
+
+test('cloud merge retains unchanged imported guides and detects conflicting removals', () => {
+  const run=reader();
+  run(`loadPrefs();window.base={format:'orthobible-backup',version:1,reader:backupReader(state),personal:validatePersonalNotes({notes:{'JHN:1:1':{body:'One'}}})}; window.local=JSON.parse(JSON.stringify(base));window.remote=JSON.parse(JSON.stringify(base));local.personal=null; remote.personal.notes['JHN:1:2']={body:'Two'};window.merged=mergeCloudBackups(base,local,remote);`);
+  assert.equal(run('merged.conflicts.length'),1);
+  assert.equal(run('merged.conflicts[0]'),'Imported study material');
+});
+
+test('each reading plan covers its chapters exactly once and saves completion', () => {
+  const run=reader();
+  assert.equal(run('planDays("gospels").length'),30);
+  assert.equal(run('planDays("psalms").flat().length'),150);
+  assert.equal(run('new Set(planDays("whole-bible").flat().map(p=>p.book+":"+p.ch)).size'),run('BIBLE.books.reduce((n,b)=>n+b.n,0)'));
+  run(`state.readingPlan={id:'gospels',completed:[0,0,30,-1]};state.history=[{book:'BAD',chapter:1,scroll:0,ts:1}];normalizeReaderTools(state);`);
+  assert.equal(run('JSON.stringify(state.readingPlan.completed)'),'[0]');
+  assert.equal(run('state.history.length'),0);
+});
+
+test('recent history deduplicates chapters while retaining reading position', () => {
+  const run=reader();
+  run(`recordHistory('JHN',1,.25);recordHistory('GEN',2,.6);recordHistory('JHN',1,.7);`);
+  assert.equal(run('state.history.length'),2);
+  assert.equal(run('state.history[0].scroll'),.7);
+  assert.equal(run('state.history[1].book'),'GEN');
+});
+
+test('source notes attach only through a valid matching-edition alignment', () => {
+  const run=reader();
+  run(`loadPrefs();window.personal=validatePersonalNotes({notes:{'PSA:23:1':{body:'Original archive'}},sourceNotes:{'PSA:22:1':{body:'Source note',sourceVerse:'The Lord is my shepherd',see:[]}},alignment:{edition:BIBLE.edition,version:1,notes:{'PSA:22:1':'PSA:22:1'},verses:{'PSA:22:1':'PSA:22:1'}}});applyPersonalNotes(personal);`);
+  assert.equal(run('noteAt("PSA",22,1).body'),'Source note');
+  assert.equal(run('noteAt("PSA",23,1)'),null);
+  assert.equal(run('STUDY.notes["PSA:23:1"].body'),'Original archive');
+  assert.throws(()=>run(`validatePersonalNotes({...personal,alignment:{edition:'another-edition',version:1}})`));
+  assert.throws(()=>run(`validatePersonalNotes({...personal,alignment:{edition:BIBLE.edition,version:1,notes:{'PSA:22:1':'PSA:999:1'}}})`));
+});
+
+test('search covers imported guide tables and escapes note previews', () => {
+  const run=reader();
+  run(`personalGuides=[{title:'Comparison',blocks:[{type:'table',rows:[['Orthodox','Genesis']]}]}];STUDY.notes={'JHN:1:1':{body:'<script>beginning</script>'}};`);
+  assert.ok(run('searchStudyContent("Genesis","guides")').includes('Comparison'));
+  const html=run('searchStudyContent("beginning","notes")');
+  assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));
+});
+
+function cloudHarness() {
+  const run=reader();
+  run(`loadPrefs();window.navigator={onLine:true};cloudEnabled=true;queueCloudSync=()=>{window.queued=true};window.local={format:'orthobible-backup',version:1,reader:backupReader(state),personal:null};window.remote=JSON.parse(JSON.stringify(local));remote.reader.comments={'JHN:1:1':'From Mac'};window.baseline=JSON.parse(JSON.stringify(local));window.records={};window.user={user:'u',project:'p',access_token:'test'};records[cloudMetaKey(user)]={revision:1,studyRevision:1,base:baseline};window.revision=2;window.uploads=[];cloudSession=async()=>user;studyRead=async k=>records[k];studyTransaction=async v=>Object.assign(records,v);createBackup=async()=>JSON.parse(JSON.stringify(local));restoreBackup=async b=>{local=JSON.parse(JSON.stringify(b))};cloudRequest=async(path,options)=>{if(path.includes('rpc')){const payload=JSON.parse(options.body);if(payload.expected_revision!==revision)throw new Error('conflict');uploads.push(payload);remote={...remote,reader:payload.next_reader,personal:payload.next_personal?payload.next_personal.data:remote.personal};revision++;if(window.editWhileUploading){local.reader.comments['JHN:1:3']='Typed during sync';window.editWhileUploading=false;}return {revision,study_revision:1};}if(path.includes('select=personal'))return [{personal:{data:remote.personal}}];return [{revision,study_revision:1,reader:remote.reader}];};`);
+  return run;
+}
+
+test('cloud sync merges independent saves and does not re-upload unchanged study material',async()=>{
+  const run=cloudHarness();
+  run(`local.reader.highlights['JHN:1:2']='gold';`);
+  await run('syncCloud()');
+  assert.equal(run('local.reader.comments["JHN:1:1"]'),'From Mac');
+  assert.equal(run('remote.reader.highlights["JHN:1:2"]'),'gold');
+  assert.equal(run('uploads[0].next_personal'),null);
+  assert.equal(run('records[cloudMetaKey(user)].revision'),3);
+});
+
+test('edits made during an upload survive and do not turn unapplied remote additions into deletions',async()=>{
+  const run=cloudHarness();
+  run(`local.reader.highlights['JHN:1:2']='gold';window.editWhileUploading=true;`);
+  await run('syncCloud()');
+  assert.equal(run('local.reader.comments["JHN:1:3"]'),'Typed during sync');
+  assert.equal(run('records[cloudMetaKey(user)].revision'),1);
+  await run('syncCloud()');
+  assert.equal(run('remote.reader.comments["JHN:1:1"]'),'From Mac');
+  assert.equal(run('remote.reader.comments["JHN:1:3"]'),'Typed during sync');
+  assert.equal(run('local.reader.comments["JHN:1:1"]'),'From Mac');
+});
+
+test('offline sync never calls the server and conflicting comments do not upload',async()=>{
+  const run=cloudHarness();
+  run(`navigator.onLine=false;`);await run('syncCloud()');assert.equal(run('uploads.length'),0);
+  run(`navigator.onLine=true;local.reader.comments['JHN:1:1']='From phone';`);await run('syncCloud()');
+  assert.equal(run('uploads.length'),0);assert.equal(run('cloudConflict.conflicts.length'),1);
 });

@@ -13,10 +13,15 @@ A simple, offline Scripture reader. LXX2012 Septuagint Old Testament with the Wo
 - **Saved:** filter your bookmarks, highlights, and comments.
 - **Go back:** drag right from a prayer, Wisdom topic, reading guide, book picker, or linked passage. The current view slides with your finger and reveals its parent. Release beyond roughly one third of the view to go back; a short drag, reversal, or touch cancellation restores the current view.
 - **Reading settings:** change text size, light/dark appearance, introductions, and notes.
+- **Device persistence:** reading position, saves, history, plan progress, and preferences are mirrored into IndexedDB. Startup recovers the newer copy from localStorage or IndexedDB. Imported OSB material stays in IndexedDB across app-cache updates.
+- **Storage & backup:** check offline readiness, request browser storage protection, repair missing offline files, and export a complete JSON backup to Files or iCloud Drive. Restore previews the contents and keeps an undo copy; reader state and personal imports commit together.
+- **Reading tools:** recent passages, three reading plans with saved completion, focus mode, font selection, line spacing, and page tone. Search can be restricted to a testament, book, study notes, or guides. Notes and related passages open in previews.
 
 Footer buttons always open their section’s main view. Preferences, saved verses, and imported study notes remain in this browser. Existing `obible3` data is preserved across the redesign. Calendar and Hours sections have been removed.
 
 The Bible text is LXX2012 + WEB NT, not the printed Orthodox Study Bible’s SAAS/NKJV translation. Built-in introductions and verse notes are original; users can import notes from their own copy without uploading them to this repository.
+
+No account or backend is required. Cloud sync is disabled by default and its settings are hidden until configured. Optional backend code is documented in `cloud/README.md`. Device storage is not a substitute for a backup outside the browser: clearing site data or losing the phone can remove both local copies.
 
 ## Local preview
 
@@ -36,3 +41,5 @@ See `GITHUB.md` for GitHub Pages and offline installation. Run regression checks
 Rebuild with `python3 scripts/build_septuagint.py /path/to/eng-lxx2012_vpl.zip`. The source URL, SHA-256, and counts are recorded in `data/lxx2012-source.json`. The script takes the unchanged WEB NT and migration archive from commit `b42fa0d`.
 
 To rebuild a private context import from the owner’s extracted MOBI HTML, run `python3 scripts/build_personal_context.py /path/to/book.html /path/to/orthobible-study-notes.json /path/outside/repo/orthobible-osb-context.json` (requires BeautifulSoup). The resulting JSON includes the existing notes unchanged and stays outside the published repository. Import it on each reading device; IndexedDB persists it independently of app cache updates. Older notes-only imports remain supported.
+
+For source-linked notes, run `python3 scripts/align_personal_notes.py /path/to/book.html /path/to/orthobible-osb-context.json /path/outside/repo/orthobible-osb-complete.json`. This preserves the earlier notes and adds source verse text, conservative text matches, and review candidates. Only close, distinctive matches are attached automatically; unmatched notes remain browsable and can be linked after comparing both verses in the app. Text matching is not a scholarly verification of every verse. Output and the alignment review report contain private copyrighted material and must stay outside this repository.

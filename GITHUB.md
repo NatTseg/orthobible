@@ -4,7 +4,7 @@ Live: https://nattseg.github.io/orthobible/
 
 Publish the repository root from `main` using Settings → Pages → Deploy from a branch.
 
-Keep these files together: `index.html`, `app.js`, `swipe.js`, `personal-notes.js`, `styles.css`, `bible-data.js`, `legacy-web-data.js`, `edition.js`, `study-data.js`, `wisdom-data.js`, `prayers-data.js`, `sw.js`, `manifest.webmanifest`, `icon.svg`, `apple-touch-icon.png`, and `icon-512.png`.
+Keep all root app assets together, including `persistence.js`, `reader-tools.js`, `note-alignment.js`, `cloud-config.js`, and `cloud-sync.js`. The complete offline asset list is in `sw.js`.
 
 Open the Pages URL while connected, let the first download finish, then use your browser’s “Add to Home Screen” or “Install” command. After the service worker has cached the app, it works offline. Bookmarks, comments, highlights, and progress are stored in this browser.
 
@@ -17,3 +17,13 @@ After the lowercase repository rename, open the new URL online once to cache it 
 Transfer `orthobible-study-notes.json` from your Mac to Files on your phone (for example, with AirDrop). Open the installed orthobible app, choose Reading settings → Import study notes, and select that file. Wait for the imported note count, then open a chapter. The file is stored in this device’s IndexedDB and is available after offline reloads; app-cache updates do not delete it. Import in the browser or Home Screen app you intend to use, since storage can be separate. Keep the notes file as a backup: clearing browser/site data or removing an app can remove its local data.
 
 The existing extracted note references are preserved. The reader uses LXX2012 for the Old Testament and WEB for the New Testament. Imported OT notes can be read from the notes section below each chapter, using their original reference numbers; they are not automatically attached to LXX2012 verses. Importing notes does not replace the Bible text with the printed OSB translation.
+
+The newer `orthobible-osb-complete.json` import also supplies conservatively matched source-note links. Unmatched notes remain accessible through Browse all OSB source notes, where Review verse link lets you compare the original and reader text before attaching a note. Earlier notes remain in their own archive.
+
+## Persistence on iPhone
+
+Open Reading settings → Storage & backup. Wait for “Bible and app files are ready for offline reading.” Use Protect device storage to request protection; the status reports whether the browser grants it. Reading changes save automatically without an account or internet connection.
+
+Use Back up my Bible and keep the downloaded JSON in Files or iCloud Drive. It includes imported OSB content, annotations, reading position, history, plans, and preferences. Choose a backup to restore previews the contents before replacing device data; Undo the last restore recovers the preceding copy. Cloud credentials are never included.
+
+Both localStorage and IndexedDB belong to the browser. Browser data clearing, device loss, or storage eviction can remove them; a file saved outside the browser is the recovery copy. Safari and an installed Home Screen app may use separate storage, so import or restore in the one you use for reading. GitHub Pages updates replace cached public assets without deleting personal data.

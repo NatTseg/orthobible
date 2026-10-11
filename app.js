@@ -269,6 +269,7 @@ const state = {
   showNotes: true,
   showPreamble: true,
   theme: "light",
+  fontFamily: "serif", lineSpacing: 1.85, paper: "original", history: [], readingPlan: null,
 };
 let savedFilter = "all",
   wisdomTopic = null,
@@ -308,6 +309,9 @@ function bookmarked(book, ch, v) {
   );
 }
 function noteAt(book, ch, v) {
+  const sourceKey = typeof personalNotesByVerse !== "undefined" && personalNotesByVerse[keyOf(book,ch,v)]?.[0];
+  if (sourceKey) return {...personalSourceNotes[sourceKey], sourceKey};
+  if (typeof personalSourceNotes !== "undefined" && Object.keys(personalSourceNotes).length) return null;
   if (isSeptuagint(book)) return null;
   return window.STUDY?.notes?.[keyOf(book, ch, v)];
 }
@@ -318,6 +322,9 @@ function notify(message) {
   toastTimer = setTimeout(() => $("toast").classList.remove("show"), 3200);
 }
 function persist() {
+  if (typeof persistenceBusy !== "undefined" && persistenceBusy) return;
+  if (typeof recordHistory === "function" && state.tab === "bible") recordHistory();
+  state.savedAt = Math.max(Date.now(), (Number(state.savedAt) || 0) + 1);
   try {
     localStorage.setItem("obible3", JSON.stringify(state));
   } catch {
@@ -328,10 +335,12 @@ function persist() {
       storageWarned = true;
     }
   }
+  if (typeof saveReaderCopy === "function") saveReaderCopy();
+  if (typeof queueCloudSync === "function") queueCloudSync();
 }
-function loadPrefs() {
+function loadPrefs(override) {
   try {
-    const stored = JSON.parse(localStorage.getItem("obible3") || "{}");
+    const stored = override === undefined ? JSON.parse(localStorage.getItem("obible3") || "{}") : override;
     if (stored && typeof stored === "object") Object.assign(state, migrateEdition(stored));
   } catch {}
   if (!Array.isArray(state.legacySaved)) state.legacySaved = [];
@@ -368,6 +377,7 @@ function loadPrefs() {
   if (!["bible", "wisdom", "prayers", "saved"].includes(state.tab))
     state.tab = "bible";
   state.theme = state.theme === "dark" ? "dark" : "light";
+  if (typeof normalizeReaderTools === "function") normalizeReaderTools(state);
   applyAppearance();
   persist();
 }
@@ -376,6 +386,7 @@ function applyAppearance() {
   document.documentElement.style.setProperty("--fs", state.font + "px");
   document.querySelector('meta[name="theme-color"]').content =
     state.theme === "dark" ? "#191c1b" : "#f8f6f0";
+  if (typeof applyReaderToolsAppearance === "function") applyReaderToolsAppearance();
 }
 function rememberScroll() {
   if (state.tab === "bible") {
@@ -393,6 +404,7 @@ function selectTab(tab) {
   });
 }
 function openTab(tab) {
+  if (typeof setFocusReading === "function") setFocusReading(false);
   cancelBackSlide();
   wisdomTopic = null;
   wisdomListTop = 0;
@@ -414,6 +426,7 @@ function goChapter(book, ch, verse = null) {
   cancelBackSlide();
   if (!bookMeta(book) || ch < 1 || ch > bookMeta(book).n) return;
   rememberScroll();
+  if (typeof recordHistory === "function") recordHistory();
   state.book = book;
   state.chapter = ch;
   state.scroll = 0;
@@ -473,6 +486,7 @@ function rangeHtml(
 }
 function notesHtml() {
   if (!state.showNotes) return "";
+  if (typeof personalSourceNotes !== "undefined" && Object.keys(personalSourceNotes).length) return alignedChapterNotesHtml();
   if (isSeptuagint(state.book)) return legacyStudyNotesHtml(state.book);
   const entries = Object.entries(window.STUDY?.notes || {})
     .filter(([k]) => k.startsWith(`${state.book}:${state.chapter}:`))
@@ -604,7 +618,7 @@ function openDialog(title, html, back = null) {
   cancelBackSlide();
   dialogBackSnapshot = null;
   dialogBack = back;
-  dialog.classList.remove("chapter-drawer");
+  dialog.classList.remove("chapter-drawer", "note-sheet");
   searchGeneration++;
   $("dialogTitle").textContent = title;
   $("dialogBody").innerHTML = html;
@@ -737,7 +751,7 @@ function parseRef(raw) {
 function showSearch() {
   openDialog(
     "Search Scripture",
-    `<form class="search-form" id="searchForm"><input id="searchInput" type="search" aria-label="Passage or words" placeholder="John 3:16 or love one another" autocomplete="off"><button class="primary" type="submit">Search</button></form><p class="helper">Enter a passage, book name, or a phrase from Scripture.</p><div id="searchResults" aria-live="polite"></div>`,
+    `<form class="search-form" id="searchForm"><input id="searchInput" type="search" aria-label="Passage or words" placeholder="John 3:16 or love one another" autocomplete="off"><button class="primary" type="submit">Search</button></form>${searchToolsHtml()}<p class="helper">Enter a passage, book name, or a phrase from Scripture.</p><div id="searchResults" aria-live="polite"></div>`,
   );
   $("searchForm").onsubmit = (e) => {
     e.preventDefault();
@@ -746,6 +760,8 @@ function showSearch() {
   $("searchInput").oninput = () => {
     searchGeneration++;
   };
+  $("searchArea").onchange = () => { $("searchBook").hidden = $("searchArea").value !== "book"; searchGeneration++; if ($("searchInput").value.trim()) runSearch(); };
+  $("searchBook").onchange = runSearch;
   $("searchInput").focus();
 }
 async function runSearch() {
@@ -753,6 +769,8 @@ async function runSearch() {
     generation = ++searchGeneration,
     results = $("searchResults");
   if (!query) return;
+  const area = $("searchArea")?.value || "all";
+  if (area === "notes" || area === "guides") { results.innerHTML = query.length < 3 ? '<p class="helper">Use at least three letters.</p>' : searchStudyContent(query,area); return; }
   const ref = parseRef(query);
   if (ref) {
     visitPassage(ref.book, ref.ch, ref.v);
@@ -772,6 +790,7 @@ async function runSearch() {
   const found = [],
     needle = query.toLowerCase();
   for (const book of bookOrder()) {
+    if ((area === "ot" && !isSeptuagint(book)) || (area === "nt" && isSeptuagint(book)) || (area === "book" && book !== $("searchBook").value)) continue;
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (generation !== searchGeneration || !dialog.open) return;
     const chapters = window.BIBLE.t[book];
@@ -816,6 +835,8 @@ function showVerse(book, ch, v) {
         "",
       )}</div><label class="section-label" style="display:block" for="comment">Your comment</label><textarea id="comment" placeholder="Something to remember…">${esc(state.comments[key] || "")}</textarea><div class="actions"><button class="primary" id="saveComment">Save comment</button><button class="secondary" id="deleteComment" ${!state.comments[key] ? "disabled" : ""}>Remove comment</button></div>`,
   );
+  const related = relatedPassagesHtml(book,ch,v);
+  if (related) $("dialogBody").insertAdjacentHTML("beforeend", `<h3 class="section-label">Related passages</h3><div class="context-list">${related}</div>`);
   $("bookmarkVerse").onclick = () => {
     const idx = state.bookmarks.findIndex(
       (b) => b.book === book && b.chapter === ch && b.verse === v,
@@ -915,9 +936,13 @@ function showSettings() {
       )
       .join(
         "",
-      )}<h3 class="section-label">Personal study notes</h3><p class="helper" id="personalNotesStatus">${personalContextStatus()}</p><label class="text-button" for="personalNotesFile">Import study notes</label><input id="personalNotesFile" type="file" accept=".json,application/json"><p class="helper">Choose your orthobible study JSON file. It stays on this device.</p><h3 class="section-label">Reading guides</h3><button class="text-button" data-context-library="true">OSB guides &amp; book introductions ›</button><br><button class="text-button" data-essay="how-to-read">How to read the Bible ›</button><br><button class="text-button" data-essay="typology">How Scripture speaks of Christ ›</button><p class="helper">Old Testament: LXX2012, Brenton’s Greek Septuagint translation with language updates. New Testament: World English Bible. Psalm numbers follow the Septuagint; source verse ranges and gaps are preserved. Imported OSB notes retain their original references, which have not all been aligned to LXX2012. Both Bible translations are public domain. <a href="https://ebible.org/eng-lxx2012/" target="_blank" rel="noopener">LXX2012 source</a> · <a href="https://ebible.org/engwebu/" target="_blank" rel="noopener">WEB source</a>. Bookmarks, highlights, and comments are saved in this browser.</p>`,
+      )}${readerToolsSettingsHtml()}<h3 class="section-label">Your data</h3><button class="text-button" id="openStorage">Storage &amp; backup ›</button><br><button class="text-button" id="openCloudSync">Cloud sync ›</button><h3 class="section-label">Personal study notes</h3><p class="helper" id="personalNotesStatus">${personalContextStatus()}</p><label class="text-button" for="personalNotesFile">Import study notes</label><input id="personalNotesFile" type="file" accept=".json,application/json"><p class="helper">Choose your orthobible study JSON file. It stays on this device.</p><h3 class="section-label">Reading guides</h3><button class="text-button" data-context-library="true">OSB guides &amp; book introductions ›</button><br><button class="text-button" data-essay="how-to-read">How to read the Bible ›</button><br><button class="text-button" data-essay="typology">How Scripture speaks of Christ ›</button><p class="helper">Old Testament: LXX2012, Brenton’s Greek Septuagint translation with language updates. New Testament: World English Bible. Psalm numbers follow the Septuagint; source verse ranges and gaps are preserved. Imported OSB notes retain their original references, which have not all been aligned to LXX2012. Both Bible translations are public domain. <a href="https://ebible.org/eng-lxx2012/" target="_blank" rel="noopener">LXX2012 source</a> · <a href="https://ebible.org/engwebu/" target="_blank" rel="noopener">WEB source</a>. Bookmarks, highlights, and comments are saved in this browser.</p>`,
   );
+  bindReaderToolsSettings();
   $("personalNotesFile").onchange = importPersonalNotes;
+  $("openStorage").onclick = showStorage;
+  $("openCloudSync").hidden = !cloudConfig();
+  $("openCloudSync").onclick = showCloudSync;
   const font = (delta) => {
     rememberScroll();
     state.font = Math.max(16, Math.min(28, state.font + delta));
@@ -967,6 +992,7 @@ function showEssay(id) {
 function handleAction(event) {
   const button = event.target.closest("button");
   if (!button) return;
+  if (handleReaderToolAction(button)) return;
   if (button.dataset.contextLibrary) { showContextLibrary(); return; }
   if (button.dataset.contextGuide !== undefined) { showStudyContext("guide", button.dataset.contextGuide, button.dataset.contextParent); return; }
   if (button.dataset.contextIntro) { showStudyContext("intro", button.dataset.contextIntro, button.dataset.contextParent); return; }
@@ -983,7 +1009,7 @@ function handleAction(event) {
     const p = parseKey(button.dataset.key);
     if (button.dataset.action === "verse") showVerse(p.book, p.ch, p.v);
     else if (button.dataset.action === "jump") visitPassage(p.book, p.ch, p.v);
-    else jumpNote(p.book, p.ch, p.v);
+    else { const note=noteAt(p.book,p.ch,p.v); showStudyNote(note?.sourceKey || keyOf(p.book,p.ch,p.v),!!note?.sourceKey); }
   } else if (button.dataset.book) showChapters(button.dataset.book);
   else if (button.dataset.chapter)
     goChapter(button.dataset.chapterBook, +button.dataset.chapter);
@@ -1016,6 +1042,15 @@ window.addEventListener("pagehide", () => {
   rememberScroll();
   persist();
 });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && persistenceReady) {
+    clearTimeout(saveTimer);
+    rememberScroll();
+    persist();
+  }
+});
+$("exitFocus").onclick = () => setFocusReading(false);
+pane.addEventListener("click", event => { if (focusReading && !event.target.closest("button,a,input,summary") && !window.getSelection()?.toString()) setFocusReading(false); });
 $("home").onclick = (e) => {
   e.preventDefault();
   openTab("bible");
@@ -1119,15 +1154,22 @@ document.addEventListener("focusin", syncViewport);
 document.addEventListener("focusout", syncViewport);
 fitViewport();
 if (window.BIBLE?.t) {
-  loadPrefs();
+  (async () => {
+  document.querySelector(".app").inert = true;
+  const storedReader = await readStoredReader();
+  persistenceReady = true;
+  loadPrefs(storedReader || {});
   selectTab(state.tab);
   if (state.tab === "bible") renderChapter(state.scroll);
   else if (state.tab === "wisdom") renderWisdom();
   else if (state.tab === "prayers") renderPrayers();
   else renderSaved();
-  restorePersonalNotes();
+  await restorePersonalNotes();
+  document.querySelector(".app").inert = false;
+  initializeCloudSync();
   if ("serviceWorker" in navigator)
     navigator.serviceWorker.register("./sw.js").catch(() => {});
+  })().catch(() => { document.querySelector(".app").inert = false; notify("Could not restore saved data. Please reload before making changes."); });
 } else
   pane.innerHTML =
     '<p class="empty">Scripture could not load. Reconnect and refresh to download the Bible.</p>';

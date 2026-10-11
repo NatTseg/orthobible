@@ -1017,3 +1017,26 @@ dialog.swipe-settling::backdrop { transition: background .2s ease, backdrop-filt
 @media (prefers-reduced-motion: reduce) {
   dialog.swipe-settling::backdrop { transition: none; }
 }
+
+.storage-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 24px; }
+#storageStatus p { margin: 12px 0; }
+#restoreBackupFile { margin: 10px 0; }
+#exportBackup { display: block; margin-bottom: 16px; }
+
+:root[data-paper="warm"]:not([data-theme="dark"]) { --bg: #f2e7ce; --surface: #f7eedb; }
+:root[data-paper="neutral"]:not([data-theme="dark"]) { --bg: #ffffff; --surface: #ffffff; }
+.verses, .prayer-text { font-family: var(--reading-font, Georgia, serif); line-height: var(--reading-leading, 1.85); }
+.essay p, .introduction p { font-family: var(--reading-font, Georgia, serif); line-height: var(--reading-leading, 1.85); }
+.setting select { max-width: 55%; padding: 8px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.setting input[type="range"] { width: 50%; padding: 0; }
+.search-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
+.search-filters select { max-width: 100%; font: inherit; padding: 8px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.plan-navigation { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 20px 0; }
+.plan-navigation button { font-size: 12px; }
+progress { width: 100%; accent-color: var(--accent); }
+.focus-reading .header, .focus-reading .chapter-bar, .focus-reading .tabs { display: none; }
+.focus-reading #pane { padding-top: calc(18px + env(safe-area-inset-top, 0px)); padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+#exitFocus { position: absolute; right: 18px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5; box-shadow: 0 2px 12px #0002; }
+dialog.note-sheet { margin: auto auto 0; max-height: 65dvh; width: min(100%,640px); border-radius: 18px 18px 0 0; padding-bottom: env(safe-area-inset-bottom,0px); }
+
+#sourceNoteChapter { width: 100%; padding: 10px; font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); margin: 8px 0 18px; }
