@@ -14,7 +14,19 @@ function applyReaderToolsAppearance() {
   document.documentElement.style.setProperty('--reading-font',fonts[state.fontFamily]||fonts.serif);
   document.documentElement.style.setProperty('--reading-leading',String(state.lineSpacing||1.85));
   document.documentElement.dataset.paper=state.paper||'original';
-  document.querySelector('meta[name="theme-color"]').content=state.theme==='dark'?'#191c1b':state.paper==='warm'?'#f2e7ce':state.paper==='neutral'?'#ffffff':'#f8f6f0';
+  syncViewportTheme();
+}
+function syncViewportTheme() {
+  const scheme=state.theme==='dark'?'dark':'light';
+  const color=scheme==='dark'?'#191c1b':state.paper==='warm'?'#f2e7ce':state.paper==='neutral'?'#ffffff':'#f8f6f0';
+  // Keep Safari's under-page background and older browsers' theme metadata in sync.
+  // Give browser chrome the same concrete color as the rendered page edges.
+  document.documentElement.style.backgroundColor=color;
+  document.body.style.backgroundColor=color;
+  document.documentElement.style.colorScheme=scheme;
+  document.querySelector('meta[name="theme-color"]').content=color;
+  const meta=document.querySelector('meta[name="color-scheme"]');
+  if(meta)meta.content=scheme;
 }
 function recordHistory(book=state.book,chapter=state.chapter,scroll=state.scroll) {
   if (!bookMeta(book)) return;

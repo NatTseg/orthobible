@@ -17,6 +17,7 @@ function reader(stored = {}) {
   });
   const nodes = new Map();
   const document = {
+    body: element(),
     getElementById(id) {
       if (!nodes.has(id)) nodes.set(id, element());
       return nodes.get(id);
@@ -140,7 +141,7 @@ test("activation deletes only old orthobible caches", async () => {
         "orthodox-bible-v13",
         "orthodox-bible-v18",
         "orthodox-bible-v20",
-        "orthodox-bible-v27",
+        "orthodox-bible-v28",
       ],
       delete: async (key) => deleted.push(key),
     },

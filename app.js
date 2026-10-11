@@ -384,8 +384,6 @@ function loadPrefs(override) {
 function applyAppearance() {
   document.documentElement.dataset.theme = state.theme;
   document.documentElement.style.setProperty("--fs", state.font + "px");
-  document.querySelector('meta[name="theme-color"]').content =
-    state.theme === "dark" ? "#191c1b" : "#f8f6f0";
   if (typeof applyReaderToolsAppearance === "function") applyReaderToolsAppearance();
 }
 function rememberScroll() {

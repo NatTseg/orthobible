@@ -80,6 +80,10 @@ button {
   flex-direction: column;
 }
 .header {
+  /* Opaque viewport edges let Safari extend the selected theme into its bars. */
+  position: sticky;
+  top: 0;
+  background-color: var(--bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -313,6 +317,8 @@ summary {
   min-height: 44px;
 }
 .tabs {
+  position: sticky;
+  bottom: 0;
   display: flex;
   justify-content: center;
   gap: 36px;
